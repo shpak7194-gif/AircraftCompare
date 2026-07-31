@@ -3,14 +3,15 @@ package com.example.myapplication
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -21,10 +22,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AirlineSeatReclineNormal
 import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.Height
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.LocalGasStation
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material3.*
@@ -74,7 +81,16 @@ data class Aircraft(
     val lengthM: Double,
     val wingspanM: Double,
     val mtowKg: Int,
-    val engine: String
+    val engine: String,
+    val cruiseSpeedKmh: Int,
+    val cruiseMach: Double,
+    val heightM: Double,
+    val cabinWidthM: Double,
+    val fuelCapacityLiters: Int,
+    val aircraftType: String,
+    val firstFlight: String,
+    val interestingFact: String,
+    val history: String
 ) {
     val fullName: String
         get() = "$manufacturer $model"
@@ -85,9 +101,16 @@ private enum class UnitSystem {
     AVIATION
 }
 
+private enum class ComparisonSection {
+    PARAMETERS,
+    ROUTE
+}
+
 private const val KM_TO_NAUTICAL_MILES = 0.5399568
 private const val METERS_TO_FEET = 3.28084
 private const val KG_TO_POUNDS = 2.20462
+private const val KMH_TO_KNOTS = 0.5399568
+private const val LITERS_TO_US_GALLONS = 0.264172
 
 private fun formatDecimal(value: Double): String {
     val rounded = (value * 10).roundToInt() / 10.0
@@ -95,6 +118,13 @@ private fun formatDecimal(value: Double): String {
         .toString()
         .removeSuffix(".0")
         .replace('.', ',')
+}
+
+private fun formatMach(value: Double): String {
+    val hundredths = (value * 100).roundToInt()
+    val wholePart = hundredths / 100
+    val decimalPart = (hundredths % 100).toString().padStart(2, '0')
+    return "$wholePart,$decimalPart"
 }
 
 private fun formatDistance(km: Double, unitSystem: UnitSystem): String {
@@ -118,14 +148,160 @@ private fun formatWeight(kg: Int, unitSystem: UnitSystem): String {
     }
 }
 
+private fun formatSpeed(
+    speedKmh: Int,
+    mach: Double,
+    unitSystem: UnitSystem
+): String {
+    val speed = when (unitSystem) {
+        UnitSystem.METRIC -> "$speedKmh км/ч"
+        UnitSystem.AVIATION -> "${(speedKmh * KMH_TO_KNOTS).roundToInt()} kt"
+    }
+
+    return "$speed · M ${formatMach(mach)}"
+}
+
+private fun formatFuel(liters: Int, unitSystem: UnitSystem): String {
+    return when (unitSystem) {
+        UnitSystem.METRIC -> "$liters л"
+        UnitSystem.AVIATION -> "${(liters * LITERS_TO_US_GALLONS).roundToInt()} US gal"
+    }
+}
+
 private val aircraftList = listOf(
-    Aircraft("Boeing", "737 MAX 8", "160–180, максимум 210", 6480, 39.5, 35.9, 82640, "2 × CFM LEAP-1B"),
-    Aircraft("Boeing", "787-9 Dreamliner", "250–325, 2 класса", 15370, 62.8, 60.1, 259220, "GEnx-1B или Trent 1000"),
-    Aircraft("Boeing", "777-9", "375–450, 2 класса", 14820, 76.7, 71.8, 351530, "2 × GE9X"),
-    Aircraft("Airbus", "A220-300", "120–150, максимум 160", 6300, 38.7, 35.1, 70900, "2 × PW1500G"),
-    Aircraft("Airbus", "A320neo", "150–180, максимум 194", 6300, 37.57, 35.8, 79000, "LEAP-1A или PW1100G"),
-    Aircraft("Airbus", "A330-900neo", "287–303, максимум 465", 13600, 63.69, 64.0, 253000, "2 × Trent 7000"),
-    Aircraft("Airbus", "A350-900", "332–352, максимум 440", 15750, 66.8, 64.75, 283000, "2 × Trent XWB")
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737 MAX 8",
+        seats = "160–180, максимум 210",
+        rangeKm = 6480,
+        lengthM = 39.5,
+        wingspanM = 35.9,
+        mtowKg = 82640,
+        engine = "2 × CFM LEAP-1B",
+        cruiseSpeedKmh = 839,
+        cruiseMach = 0.79,
+        heightM = 12.3,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 25817,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "29 января 2016",
+        interestingFact = "Раздвоенные законцовки крыла Advanced Technology Winglet снижают аэродинамическое сопротивление и помогают экономить топливо.",
+        history = "737 MAX стал новым поколением семейства Boeing 737 и получил двигатели LEAP-1B и обновлённую аэродинамику. Версия 737 MAX 8 вошла в коммерческую эксплуатацию в 2017 году. После глобальной приостановки полётов в 2019 году самолёт прошёл изменения программного обеспечения, процедур и подготовки экипажей перед возвращением в эксплуатацию."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "787-9 Dreamliner",
+        seats = "250–325, 2 класса",
+        rangeKm = 15370,
+        lengthM = 62.8,
+        wingspanM = 60.1,
+        mtowKg = 259220,
+        engine = "GEnx-1B или Trent 1000",
+        cruiseSpeedKmh = 903,
+        cruiseMach = 0.85,
+        heightM = 17.0,
+        cabinWidthM = 5.49,
+        fuelCapacityLiters = 126372,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "17 сентября 2013",
+        interestingFact = "Иллюминаторы Dreamliner затемняются электронно: пассажир регулирует прозрачность кнопкой, поэтому обычные механические шторки не нужны.",
+        history = "Семейство 787 Dreamliner создавалось как новое поколение дальнемагистральных самолётов с широким применением композитных материалов и более электрической архитектурой. Удлинённый 787-9 впервые поднялся в воздух 17 сентября 2013 года и расширил вместимость и дальность семейства."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "777-9",
+        seats = "375–450, 2 класса",
+        rangeKm = 14820,
+        lengthM = 76.7,
+        wingspanM = 71.8,
+        mtowKg = 351530,
+        engine = "2 × GE9X",
+        cruiseSpeedKmh = 892,
+        cruiseMach = 0.84,
+        heightM = 19.5,
+        cabinWidthM = 5.96,
+        fuelCapacityLiters = 197977,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "25 января 2020",
+        interestingFact = "Законцовки крыла складываются после посадки: размах уменьшается примерно с 71,8 до 64,8 м, и самолёт помещается у существующих аэропортовых гейтов.",
+        history = "777-9 — крупнейшая пассажирская версия программы 777X, запущенной в 2013 году. Первый полёт самолёта состоялся 25 января 2020 года. Модель сочетает конструктивное наследие Boeing 777 с новым композитным крылом, складывающимися законцовками и двигателями GE9X."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A220-300",
+        seats = "120–150, максимум 160",
+        rangeKm = 6300,
+        lengthM = 38.7,
+        wingspanM = 35.1,
+        mtowKg = 70900,
+        engine = "2 × PW1500G",
+        cruiseSpeedKmh = 829,
+        cruiseMach = 0.78,
+        heightM = 11.5,
+        cabinWidthM = 3.28,
+        fuelCapacityLiters = 21508,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "27 февраля 2015",
+        interestingFact = "В экономклассе обычно используется схема кресел 2+3. Благодаря этому средних мест меньше, чем в привычных салонах с компоновкой 3+3.",
+        history = "A220 начинался как канадская программа Bombardier C Series, запущенная в 2008 году. Удлинённый CS300, позднее переименованный в A220-300, вошёл в коммерческую эксплуатацию с airBaltic 14 декабря 2016 года. В 2018 году Airbus стал основным партнёром программы."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A320neo",
+        seats = "150–180, максимум 194",
+        rangeKm = 6300,
+        lengthM = 37.57,
+        wingspanM = 35.8,
+        mtowKg = 79000,
+        engine = "LEAP-1A или PW1100G",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 11.76,
+        cabinWidthM = 3.70,
+        fuelCapacityLiters = 26730,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "25 сентября 2014",
+        interestingFact = "Обозначение neo расшифровывается как New Engine Option. При этом самолёт сохраняет высокую степень общности с предыдущим семейством A320.",
+        history = "A320neo стал глубокой модернизацией семейства A320; обозначение neo означает New Engine Option. Первый полёт состоялся 25 сентября 2014 года. Новые двигатели и законцовки крыла Sharklet позволили сохранить общую платформу A320, повысив эффективность и дальность."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A330-900neo",
+        seats = "287–303, максимум 465",
+        rangeKm = 13600,
+        lengthM = 63.69,
+        wingspanM = 64.0,
+        mtowKg = 253000,
+        engine = "2 × Trent 7000",
+        cruiseSpeedKmh = 871,
+        cruiseMach = 0.82,
+        heightM = 16.79,
+        cabinWidthM = 5.26,
+        fuelCapacityLiters = 139090,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "19 октября 2017",
+        interestingFact = "A330neo стал первым самолётом Airbus с новым интерьером Airspace, который позднее появился и на других семействах производителя.",
+        history = "A330neo был запущен в 2014 году как развитие проверенного семейства A330. A330-900 впервые поднялся в воздух 19 октября 2017 года, а первый самолёт передали TAP Air Portugal 26 ноября 2018 года. Модель получила двигатели Trent 7000, обновлённое крыло и салон Airspace."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A350-900",
+        seats = "332–352, максимум 440",
+        rangeKm = 15750,
+        lengthM = 66.8,
+        wingspanM = 64.75,
+        mtowKg = 283000,
+        engine = "2 × Trent XWB",
+        cruiseSpeedKmh = 903,
+        cruiseMach = 0.85,
+        heightM = 17.05,
+        cabinWidthM = 5.71,
+        fuelCapacityLiters = 166488,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "14 июня 2013",
+        interestingFact = "Около 70% конструкции A350 выполнено из современных материалов: примерно 53% приходится на композиты и 14% — на титан.",
+        history = "A350 XWB создавался Airbus с чистого листа как новое дальнемагистральное семейство с широким применением композитов в фюзеляже и крыле. A350-900 впервые поднялся в воздух 14 июня 2013 года и вошёл в коммерческую эксплуатацию в начале 2015 года."
+    )
 )
 
 // Условный хаб вылета для демонстрации маршрутов — Москва (SVO)
@@ -324,6 +500,8 @@ data class FavoritePair(val firstIndex: Int, val secondIndex: Int)
 private const val APP_PREFERENCES_NAME = "aircraft_compare_preferences"
 private const val FAVORITES_PREFERENCE_KEY = "favorite_pairs"
 private const val UNIT_SYSTEM_PREFERENCE_KEY = "unit_system"
+private const val DARK_THEME_PREFERENCE_KEY = "dark_theme"
+private const val ROUTE_AIRCRAFT_PREFERENCE_KEY = "route_aircraft_index"
 
 private fun loadFavoritePairs(context: Context): List<FavoritePair> {
     val savedValue = context
@@ -381,19 +559,58 @@ private fun saveUnitSystem(context: Context, unitSystem: UnitSystem) {
         .apply()
 }
 
+private fun loadDarkTheme(context: Context): Boolean {
+    return context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .getBoolean(DARK_THEME_PREFERENCE_KEY, false)
+}
+
+private fun saveDarkTheme(context: Context, darkTheme: Boolean) {
+    context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(DARK_THEME_PREFERENCE_KEY, darkTheme)
+        .apply()
+}
+
+private fun loadRouteAircraftIndex(context: Context): Int {
+    val savedIndex = context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .getInt(ROUTE_AIRCRAFT_PREFERENCE_KEY, 0)
+
+    return if (savedIndex in aircraftList.indices) savedIndex else 0
+}
+
+private fun saveRouteAircraftIndex(context: Context, aircraftIndex: Int) {
+    context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putInt(ROUTE_AIRCRAFT_PREFERENCE_KEY, aircraftIndex)
+        .apply()
+}
+
 @Composable
 fun AircraftCompareApp() {
     val context = LocalContext.current
     val storageContext = context.applicationContext
+    val mainScrollState = rememberScrollState()
 
     var firstIndex by rememberSaveable { mutableStateOf(0) }
     var secondIndex by rememberSaveable { mutableStateOf(4) }
-    var searchText by rememberSaveable { mutableStateOf("") }
     var manufacturerFilter by rememberSaveable { mutableStateOf("Все") }
-    var darkTheme by rememberSaveable { mutableStateOf(false) }
+    var darkTheme by remember(storageContext) {
+        mutableStateOf(loadDarkTheme(storageContext))
+    }
     var cityQuery by rememberSaveable { mutableStateOf("") }
+    var detailAircraftIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    var comparisonSectionName by rememberSaveable {
+        mutableStateOf(ComparisonSection.PARAMETERS.name)
+    }
     var unitSystem by remember(storageContext) {
         mutableStateOf(loadUnitSystem(storageContext))
+    }
+    var routeAircraftIndex by remember(storageContext) {
+        mutableStateOf(loadRouteAircraftIndex(storageContext))
     }
 
     val favorites = remember(storageContext) {
@@ -404,215 +621,322 @@ fun AircraftCompareApp() {
 
     val firstAircraft = aircraftList[firstIndex]
     val secondAircraft = aircraftList[secondIndex]
+    val routeAircraft = aircraftList[routeAircraftIndex]
+    val allAircraftOptions = remember {
+        aircraftList.mapIndexed { index, aircraft -> index to aircraft }
+    }
 
-    val filteredAircraft = aircraftList
-        .mapIndexed { index, aircraft -> index to aircraft }
+    val filteredAircraft = allAircraftOptions
         .filter { (_, aircraft) ->
-            val matchesSearch = aircraft.fullName.contains(searchText, ignoreCase = true)
-            val matchesManufacturer = manufacturerFilter == "Все" || aircraft.manufacturer == manufacturerFilter
-            matchesSearch && matchesManufacturer
+            manufacturerFilter == "Все" || aircraft.manufacturer == manufacturerFilter
         }
 
     val searchedCity = remember(cityQuery) {
         if (cityQuery.isBlank()) null
         else worldCities.firstOrNull { it.name.contains(cityQuery, ignoreCase = true) }
     }
+    val searchedDistance = remember(searchedCity) {
+        searchedCity?.let { haversineKm(homeAirport, it.point) }
+    }
+    val suitableAircraft = remember(searchedDistance) {
+        if (searchedDistance == null) {
+            emptyList()
+        } else {
+            aircraftList
+                .mapIndexed { index, aircraft -> index to aircraft }
+                .filter { (_, aircraft) -> searchedDistance <= aircraft.rangeKm }
+                .sortedBy { (_, aircraft) -> aircraft.rangeKm - searchedDistance }
+        }
+    }
 
     val isCurrentFavorite = favorites.any { it.firstIndex == firstIndex && it.secondIndex == secondIndex }
+    val comparisonSection = ComparisonSection.valueOf(comparisonSectionName)
+
+    BackHandler(enabled = detailAircraftIndex != null) {
+        detailAircraftIndex = null
+    }
 
     AircraftTheme(darkTheme) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
-            ) {
-                Header(
-                    darkTheme = darkTheme,
-                    onThemeChange = { darkTheme = !darkTheme }
-                )
+            val detailIndex = detailAircraftIndex
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                UnitSystemSelector(
-                    selectedUnitSystem = unitSystem,
+            if (detailIndex != null) {
+                AircraftDetailScreen(
+                    aircraft = aircraftList[detailIndex],
+                    unitSystem = unitSystem,
+                    onBack = { detailAircraftIndex = null },
                     onUnitSystemSelected = { selected ->
                         unitSystem = selected
                         saveUnitSystem(storageContext, selected)
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                TextField(
-                    value = searchText,
-                    onValueChange = { searchText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Поиск самолёта") },
-                    placeholder = { Text("Например: A350 или Boeing") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(text = "Производитель", style = MaterialTheme.typography.labelLarge)
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                ManufacturerFilters(
-                    selectedManufacturer = manufacturerFilter,
-                    onManufacturerSelected = { manufacturerFilter = it }
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                SelectionCard(
-                    firstAircraft = firstAircraft,
-                    secondAircraft = secondAircraft,
-                    options = filteredAircraft,
-                    onFirstSelected = { firstIndex = it },
-                    onSecondSelected = { secondIndex = it }
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                if (favorites.isNotEmpty()) {
-                    FavoritesRow(
-                        favorites = favorites,
-                        onSelect = { pair ->
-                            firstIndex = pair.firstIndex
-                            secondIndex = pair.secondIndex
-                        },
-                        onRemove = { pair ->
-                            favorites.remove(pair)
-                            saveFavoritePairs(storageContext, favorites)
+                    },
+                    onShare = { aircraft ->
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                buildAircraftShareText(aircraft, unitSystem)
+                            )
                         }
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Результат сравнения",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    IconButton(
-                        onClick = {
-                            if (isCurrentFavorite) {
-                                favorites.removeAll { it.firstIndex == firstIndex && it.secondIndex == secondIndex }
-                            } else {
-                                favorites.add(FavoritePair(firstIndex, secondIndex))
-                            }
-                            saveFavoritePairs(storageContext, favorites)
-                        }
-                    ) {
-                        Icon(
-                            imageVector = if (isCurrentFavorite) Icons.Filled.Star else Icons.Outlined.Star,
-                            contentDescription = "В избранное",
-                            tint = if (isCurrentFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                        context.startActivity(
+                            Intent.createChooser(intent, "Поделиться самолётом")
                         )
                     }
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .systemBarsPadding()
+                        .verticalScroll(mainScrollState)
+                        .padding(16.dp)
+                ) {
+                    Header(
+                        darkTheme = darkTheme,
+                        onThemeChange = {
+                            darkTheme = !darkTheme
+                            saveDarkTheme(storageContext, darkTheme)
+                        }
+                    )
 
-                    IconButton(
-                        onClick = {
-                            val summary = buildShareText(
-                                first = firstAircraft,
-                                second = secondAircraft,
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    UnitSystemSelector(
+                        selectedUnitSystem = unitSystem,
+                        onUnitSystemSelected = { selected ->
+                            unitSystem = selected
+                            saveUnitSystem(storageContext, selected)
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(text = "Производитель", style = MaterialTheme.typography.labelLarge)
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    ManufacturerFilters(
+                        selectedManufacturer = manufacturerFilter,
+                        onManufacturerSelected = { manufacturerFilter = it }
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    SelectionCard(
+                        firstAircraft = firstAircraft,
+                        secondAircraft = secondAircraft,
+                        options = filteredAircraft,
+                        onFirstSelected = { firstIndex = it },
+                        onSecondSelected = { secondIndex = it }
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    if (favorites.isNotEmpty()) {
+                        FavoritesRow(
+                            favorites = favorites,
+                            onSelect = { pair ->
+                                firstIndex = pair.firstIndex
+                                secondIndex = pair.secondIndex
+                            },
+                            onRemove = { pair ->
+                                favorites.remove(pair)
+                                saveFavoritePairs(storageContext, favorites)
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Результат сравнения",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        IconButton(
+                            onClick = {
+                                if (isCurrentFavorite) {
+                                    favorites.removeAll {
+                                        it.firstIndex == firstIndex &&
+                                                it.secondIndex == secondIndex
+                                    }
+                                } else {
+                                    favorites.add(FavoritePair(firstIndex, secondIndex))
+                                }
+                                saveFavoritePairs(storageContext, favorites)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isCurrentFavorite) {
+                                    Icons.Filled.Star
+                                } else {
+                                    Icons.Outlined.Star
+                                },
+                                contentDescription = "В избранное",
+                                tint = if (isCurrentFavorite) {
+                                    Color(0xFFFFC107)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                val summary = buildShareText(
+                                    first = firstAircraft,
+                                    second = secondAircraft,
+                                    unitSystem = unitSystem
+                                )
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, summary)
+                                }
+                                context.startActivity(
+                                    Intent.createChooser(intent, "Поделиться сравнением")
+                                )
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Share,
+                                contentDescription = "Поделиться сравнением"
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    ComparisonSectionSelector(
+                        selectedSection = comparisonSection,
+                        onSectionSelected = { comparisonSectionName = it.name }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    when (comparisonSection) {
+                        ComparisonSection.PARAMETERS -> {
+                            AnimatedContent(
+                                targetState = firstIndex to secondIndex,
+                                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                label = "comparison_table"
+                            ) { (first, second) ->
+                                ComparisonTable(
+                                    first = aircraftList[first],
+                                    second = aircraftList[second],
+                                    unitSystem = unitSystem,
+                                    onFirstDetails = { detailAircraftIndex = first },
+                                    onSecondDetails = { detailAircraftIndex = second }
+                                )
+                            }
+                        }
+
+                        ComparisonSection.ROUTE -> {
+                            RouteAircraftSelectorCard(
+                                aircraft = routeAircraft,
+                                options = allAircraftOptions,
+                                unitSystem = unitSystem,
+                                onSelected = { selectedIndex ->
+                                    routeAircraftIndex = selectedIndex
+                                    saveRouteAircraftIndex(
+                                        storageContext,
+                                        selectedIndex
+                                    )
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            Text(
+                                text = "Проверка города",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = "Узнай, долетит ли ${routeAircraft.fullName} до нужного города",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            CityRangeChecker(
+                                query = cityQuery,
+                                onQueryChange = { cityQuery = it },
+                                matchedCity = searchedCity,
+                                aircraft = routeAircraft,
                                 unitSystem = unitSystem
                             )
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, summary)
+
+                            if (searchedCity != null && searchedDistance != null) {
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                SuitableAircraftRow(
+                                    aircraftOptions = suitableAircraft,
+                                    selectedIndex = routeAircraftIndex,
+                                    distanceKm = searchedDistance,
+                                    unitSystem = unitSystem,
+                                    onSelected = { selectedIndex ->
+                                        routeAircraftIndex = selectedIndex
+                                        saveRouteAircraftIndex(
+                                            storageContext,
+                                            selectedIndex
+                                        )
+                                    }
+                                )
                             }
-                            context.startActivity(Intent.createChooser(intent, "Поделиться сравнением"))
+
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            Text(
+                                text = "Самые дальние маршруты",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = "${routeAircraft.fullName}: дальность ${
+                                    formatDistance(
+                                        routeAircraft.rangeKm.toDouble(),
+                                        unitSystem
+                                    )
+                                } от $homeAirportName",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            AircraftMap(
+                                aircraft = routeAircraft,
+                                searchedCity = searchedCity,
+                                unitSystem = unitSystem
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "Синим — дальние маршруты. Оранжевым — найденный город.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "© OpenStreetMap contributors, © CARTO",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
-                    ) {
-                        Text("↗", fontSize = 20.sp)
                     }
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                AnimatedContent(
-                    targetState = firstIndex to secondIndex,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "comparison_table"
-                ) { (first, second) ->
-                    ComparisonTable(
-                        first = aircraftList[first],
-                        second = aircraftList[second],
-                        unitSystem = unitSystem
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Text(text = "Проверка города", style = MaterialTheme.typography.titleLarge)
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Узнай, долетит ли ${firstAircraft.fullName} до нужного города, и увидь маршрут на карте ниже",
-                    style = MaterialTheme.typography.bodySmall
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                CityRangeChecker(
-                    query = cityQuery,
-                    onQueryChange = { cityQuery = it },
-                    matchedCity = searchedCity,
-                    aircraft = firstAircraft,
-                    unitSystem = unitSystem
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                Text(text = "Самые дальние маршруты", style = MaterialTheme.typography.titleLarge)
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "${firstAircraft.fullName}: дальность ${
-                        formatDistance(firstAircraft.rangeKm.toDouble(), unitSystem)
-                    } от $homeAirportName",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                AircraftMap(
-                    aircraft = firstAircraft,
-                    searchedCity = searchedCity,
-                    unitSystem = unitSystem
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Синим — самые дальние маршруты. Оранжевым — город из поиска выше.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "© OpenStreetMap contributors, © CARTO",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
             }
         }
     }
@@ -630,11 +954,385 @@ private fun buildShareText(
                 formatDistance(second.rangeKm.toDouble(), unitSystem)
             }"
         )
+        appendLine(
+            "Крейсерская скорость: ${
+                formatSpeed(first.cruiseSpeedKmh, first.cruiseMach, unitSystem)
+            } vs ${
+                formatSpeed(second.cruiseSpeedKmh, second.cruiseMach, unitSystem)
+            }"
+        )
         appendLine("Вместимость: ${first.seats} vs ${second.seats}")
         appendLine(
             "Макс. масса: ${formatWeight(first.mtowKg, unitSystem)} vs ${
                 formatWeight(second.mtowKg, unitSystem)
             }"
+        )
+    }
+}
+
+private fun buildAircraftShareText(
+    aircraft: Aircraft,
+    unitSystem: UnitSystem
+): String {
+    return buildString {
+        appendLine(aircraft.fullName)
+        appendLine("Вместимость: ${aircraft.seats}")
+        appendLine(
+            "Дальность: ${formatDistance(aircraft.rangeKm.toDouble(), unitSystem)}"
+        )
+        appendLine(
+            "Крейсерская скорость: ${
+                formatSpeed(aircraft.cruiseSpeedKmh, aircraft.cruiseMach, unitSystem)
+            }"
+        )
+        appendLine("Тип: ${aircraft.aircraftType}")
+        appendLine("Длина: ${formatLength(aircraft.lengthM, unitSystem)}")
+        appendLine("Размах крыла: ${formatLength(aircraft.wingspanM, unitSystem)}")
+        appendLine("Высота: ${formatLength(aircraft.heightM, unitSystem)}")
+        appendLine(
+            "Ширина салона: ${formatLength(aircraft.cabinWidthM, unitSystem)}"
+        )
+        appendLine(
+            "Запас топлива: ${formatFuel(aircraft.fuelCapacityLiters, unitSystem)}"
+        )
+        appendLine("Макс. взлётная масса: ${formatWeight(aircraft.mtowKg, unitSystem)}")
+        appendLine("Двигатели: ${aircraft.engine}")
+        appendLine("Первый полёт: ${aircraft.firstFlight}")
+        appendLine()
+        appendLine("Интересный факт:")
+        appendLine(aircraft.interestingFact)
+        appendLine()
+        appendLine("Историческая справка:")
+        appendLine(aircraft.history)
+    }
+}
+
+@Composable
+private fun AircraftDetailScreen(
+    aircraft: Aircraft,
+    unitSystem: UnitSystem,
+    onBack: () -> Unit,
+    onUnitSystemSelected: (UnitSystem) -> Unit,
+    onShare: (Aircraft) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .systemBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) {
+                Text("←  Назад")
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            IconButton(onClick = { onShare(aircraft) }) {
+                Icon(
+                    imageVector = Icons.Outlined.Share,
+                    contentDescription = "Поделиться самолётом"
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(76.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Flight,
+                        contentDescription = null,
+                        modifier = Modifier.size(44.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    ManufacturerBadge(aircraft.manufacturer)
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = aircraft.model,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Пассажирский самолёт",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        UnitSystemSelector(
+            selectedUnitSystem = unitSystem,
+            onUnitSystemSelected = onUnitSystemSelected
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        AircraftDetailCard(title = "Основные характеристики") {
+            AircraftDetailRow(
+                icon = Icons.Outlined.Flight,
+                title = "Тип",
+                value = aircraft.aircraftType
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.AirlineSeatReclineNormal,
+                title = "Вместимость",
+                value = aircraft.seats
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.CalendarMonth,
+                title = "Первый полёт",
+                value = aircraft.firstFlight
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        AircraftDetailCard(title = "Лётные характеристики") {
+            AircraftDetailRow(
+                icon = Icons.Outlined.Speed,
+                title = "Крейсерская скорость",
+                value = formatSpeed(
+                    aircraft.cruiseSpeedKmh,
+                    aircraft.cruiseMach,
+                    unitSystem
+                )
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.Map,
+                title = "Дальность",
+                value = formatDistance(aircraft.rangeKm.toDouble(), unitSystem)
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.LocalGasStation,
+                title = "Запас топлива",
+                value = formatFuel(aircraft.fuelCapacityLiters, unitSystem)
+            )
+
+            Text(
+                text = "Скорость указана приблизительно: в реальном полёте она зависит от высоты, массы самолёта, ветра и выбранного режима.",
+                modifier = Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        AircraftDetailCard(title = "Размеры") {
+            AircraftDetailRow(
+                icon = Icons.Outlined.Straighten,
+                title = "Длина",
+                value = formatLength(aircraft.lengthM, unitSystem)
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.Flight,
+                title = "Размах крыла",
+                value = formatLength(aircraft.wingspanM, unitSystem)
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.Height,
+                title = "Высота",
+                value = formatLength(aircraft.heightM, unitSystem)
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.AirlineSeatReclineNormal,
+                title = "Ширина салона",
+                value = formatLength(aircraft.cabinWidthM, unitSystem)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        AircraftDetailCard(title = "Масса и двигатели") {
+            AircraftDetailRow(
+                icon = Icons.Outlined.FitnessCenter,
+                title = "Макс. взлётная масса",
+                value = formatWeight(aircraft.mtowKg, unitSystem)
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.Settings,
+                title = "Двигатели",
+                value = aircraft.engine
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        AircraftDetailCard(title = "Историческая справка") {
+            Text(
+                text = aircraft.history,
+                modifier = Modifier.padding(vertical = 4.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                lineHeight = 21.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        AircraftDetailCard(title = "Интересный факт") {
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(
+                    imageVector = Icons.Outlined.Lightbulb,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .size(22.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Text(
+                    text = aircraft.interestingFact,
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 21.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = "Дальность полёта",
+            style = MaterialTheme.typography.titleLarge
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = "${aircraft.fullName} может преодолеть до ${
+                formatDistance(aircraft.rangeKm.toDouble(), unitSystem)
+            } по справочным данным.",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        AircraftMap(
+            aircraft = aircraft,
+            searchedCity = null,
+            unitSystem = unitSystem
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Карта показывает приблизительную дальность от $homeAirportName. Реальная дальность зависит от загрузки, погоды и запаса топлива.",
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "© OpenStreetMap contributors, © CARTO",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun AircraftDetailCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            content()
+        }
+    }
+}
+
+@Composable
+private fun AircraftDetailRow(
+    icon: ImageVector,
+    title: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Text(
+            text = value,
+            modifier = Modifier.weight(1.25f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.End
         )
     }
 }
@@ -708,9 +1406,9 @@ private fun UnitSystemSelector(
                 "Авиационные"
             }
             val units = if (unitSystem == UnitSystem.METRIC) {
-                "км · м · кг"
+                "км/ч · км · м · кг"
             } else {
-                "NM · ft · lb"
+                "kt · NM · ft · lb"
             }
 
             Button(
@@ -737,6 +1435,165 @@ private fun UnitSystemSelector(
                         fontSize = 12.sp
                     )
                     Text(text = units, fontSize = 10.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComparisonSectionSelector(
+    selectedSection: ComparisonSection,
+    onSectionSelected: (ComparisonSection) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ComparisonSection.entries.forEach { section ->
+            val selected = section == selectedSection
+            val title = when (section) {
+                ComparisonSection.PARAMETERS -> "Параметры"
+                ComparisonSection.ROUTE -> "Маршрут"
+            }
+
+            Button(
+                onClick = { onSectionSelected(section) },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    contentColor = if (selected) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            ) {
+                Text(title)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RouteAircraftSelectorCard(
+    aircraft: Aircraft,
+    options: List<Pair<Int, Aircraft>>,
+    unitSystem: UnitSystem,
+    onSelected: (Int) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Самолёт для маршрута",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "Выбор здесь не меняет самолёты в таблице сравнения",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            AircraftSelector(
+                title = "Выбранная модель",
+                selected = aircraft,
+                options = options,
+                onSelected = onSelected
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Дальность: ${
+                    formatDistance(aircraft.rangeKm.toDouble(), unitSystem)
+                }",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun SuitableAircraftRow(
+    aircraftOptions: List<Pair<Int, Aircraft>>,
+    selectedIndex: Int,
+    distanceKm: Double,
+    unitSystem: UnitSystem,
+    onSelected: (Int) -> Unit
+) {
+    Column {
+        Text(
+            text = "Подходящие самолёты",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        if (aircraftOptions.isEmpty()) {
+            Text(
+                text = "В текущей базе нет самолёта с достаточной дальностью.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        } else {
+            Text(
+                text = "Нажми на модель, чтобы сразу показать её маршрут",
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                aircraftOptions.forEach { (index, aircraft) ->
+                    val rangeReserve = aircraft.rangeKm - distanceKm
+
+                    FilterChip(
+                        selected = index == selectedIndex,
+                        onClick = { onSelected(index) },
+                        label = {
+                            Column {
+                                Text(
+                                    text = aircraft.model,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Запас ${
+                                        formatDistance(rangeReserve, unitSystem)
+                                    }",
+                                    fontSize = 10.sp
+                                )
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Flight,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    )
                 }
             }
         }
@@ -886,20 +1743,22 @@ fun FavoritesRow(
                 val first = aircraftList[pair.firstIndex]
                 val second = aircraftList[pair.secondIndex]
 
-                AssistChip(
-                    onClick = { onSelect(pair) },
-                    label = { Text("${first.model} vs ${second.model}") },
-                    trailingIcon = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AssistChip(
+                        onClick = { onSelect(pair) },
+                        label = { Text("${first.model} vs ${second.model}") }
+                    )
+
+                    IconButton(
+                        onClick = { onRemove(pair) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
                         Text(
                             text = "✕",
-                            fontSize = 12.sp,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable { onRemove(pair) }
-                                .padding(2.dp)
+                            fontSize = 12.sp
                         )
                     }
-                )
+                }
             }
         }
     }
@@ -909,7 +1768,9 @@ fun FavoritesRow(
 private fun ComparisonTable(
     first: Aircraft,
     second: Aircraft,
-    unitSystem: UnitSystem
+    unitSystem: UnitSystem,
+    onFirstDetails: () -> Unit,
+    onSecondDetails: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -920,8 +1781,16 @@ private fun ComparisonTable(
         Column(modifier = Modifier.padding(12.dp)) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 Text(text = "Параметр", modifier = Modifier.weight(1.2f), style = MaterialTheme.typography.labelLarge)
-                Text(text = first.model, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
-                Text(text = second.model, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+                AircraftDetailsButton(
+                    aircraft = first,
+                    onClick = onFirstDetails,
+                    modifier = Modifier.weight(1f)
+                )
+                AircraftDetailsButton(
+                    aircraft = second,
+                    onClick = onSecondDetails,
+                    modifier = Modifier.weight(1f)
+                )
             }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
@@ -946,6 +1815,22 @@ private fun ComparisonTable(
                 leftText = formatDistance(first.rangeKm.toDouble(), unitSystem),
                 rightText = formatDistance(second.rangeKm.toDouble(), unitSystem),
                 leftValue = first.rangeKm.toDouble(), rightValue = second.rangeKm.toDouble()
+            )
+            NumberComparisonRow(
+                icon = Icons.Outlined.Speed,
+                title = "Скорость",
+                leftText = formatSpeed(
+                    first.cruiseSpeedKmh,
+                    first.cruiseMach,
+                    unitSystem
+                ),
+                rightText = formatSpeed(
+                    second.cruiseSpeedKmh,
+                    second.cruiseMach,
+                    unitSystem
+                ),
+                leftValue = first.cruiseSpeedKmh.toDouble(),
+                rightValue = second.cruiseSpeedKmh.toDouble()
             )
             NumberComparisonRow(
                 icon = Icons.Outlined.Straighten,
@@ -974,6 +1859,33 @@ private fun ComparisonTable(
                 title = "Двигатели",
                 left = first.engine,
                 right = second.engine
+            )
+        }
+    }
+}
+
+@Composable
+private fun AircraftDetailsButton(
+    aircraft: Aircraft,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = aircraft.model,
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = TextAlign.Center,
+                maxLines = 2
+            )
+            Text(
+                text = "Подробнее",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -1106,15 +2018,40 @@ private fun CityRangeChecker(
                     val reachable = distance <= aircraft.rangeKm
                     val color = if (reachable) Color(0xFF2E7D32) else Color(0xFFC62828)
                     val statusText = if (reachable) "Долетит ✓" else "Не долетит без дозаправки ✕"
+                    val rangeDifference = aircraft.rangeKm - distance
 
                     Text(
-                        text = "$statusText — расстояние ${
-                            formatDistance(distance, unitSystem)
-                        }, дальность самолёта ${
+                        text = statusText,
+                        color = color,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Расстояние: ${formatDistance(distance, unitSystem)}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Text(
+                        text = "Дальность самолёта: ${
                             formatDistance(aircraft.rangeKm.toDouble(), unitSystem)
                         }",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Text(
+                        text = if (reachable) {
+                            "Запас дальности: ${
+                                formatDistance(rangeDifference, unitSystem)
+                            }"
+                        } else {
+                            "Не хватает: ${
+                                formatDistance(abs(rangeDifference), unitSystem)
+                            }"
+                        },
                         color = color,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -1153,8 +2090,22 @@ private fun AircraftMap(
             controller.setCenter(homeAirport)
 
             setOnTouchListener { view, event ->
-                parent?.requestDisallowInterceptTouchEvent(true)
-                view.performClick()
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN,
+                    MotionEvent.ACTION_MOVE -> {
+                        parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+
+                    MotionEvent.ACTION_UP,
+                    MotionEvent.ACTION_CANCEL -> {
+                        parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    view.performClick()
+                }
+
                 false
             }
         }

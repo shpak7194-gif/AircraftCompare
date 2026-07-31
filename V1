@@ -1,0 +1,576 @@
+package com.example.myapplication
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.preference.PreferenceManager
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.XYTileSource
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
+import kotlin.math.*
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        Configuration.getInstance().load(
+            applicationContext,
+            PreferenceManager.getDefaultSharedPreferences(applicationContext)
+        )
+        Configuration.getInstance().userAgentValue = "com.example.myapplication/1.0"
+
+        setContent {
+            AircraftCompareApp()
+        }
+    }
+}
+
+data class Aircraft(
+    val manufacturer: String,
+    val model: String,
+    val seats: String,
+    val rangeKm: Int,
+    val lengthM: Double,
+    val wingspanM: Double,
+    val mtowKg: Int,
+    val engine: String
+) {
+    val fullName: String
+        get() = "$manufacturer $model"
+}
+
+private val aircraftList = listOf(
+    Aircraft("Boeing", "737 MAX 8", "160–180, максимум 210", 6480, 39.5, 35.9, 82640, "2 × CFM LEAP-1B"),
+    Aircraft("Boeing", "787-9 Dreamliner", "250–325, 2 класса", 15370, 62.8, 60.1, 259220, "GEnx-1B или Trent 1000"),
+    Aircraft("Boeing", "777-9", "375–450, 2 класса", 14820, 76.7, 71.8, 351530, "2 × GE9X"),
+    Aircraft("Airbus", "A220-300", "120–150, максимум 160", 6300, 38.7, 35.1, 70900, "2 × PW1500G"),
+    Aircraft("Airbus", "A320neo", "150–180, максимум 194", 6300, 37.57, 35.8, 79000, "LEAP-1A или PW1100G"),
+    Aircraft("Airbus", "A330-900neo", "287–303, максимум 465", 13600, 63.69, 64.0, 253000, "2 × Trent 7000"),
+    Aircraft("Airbus", "A350-900", "332–352, максимум 440", 15750, 66.8, 64.75, 283000, "2 × Trent XWB")
+)
+
+// Условный хаб вылета для демонстрации маршрутов — Москва (SVO)
+private val homeAirport = GeoPoint(55.9726, 37.4146)
+private const val homeAirportName = "Москва (SVO)"
+
+private data class City(val name: String, val point: GeoPoint)
+
+private val worldCities = listOf(
+    City("Нью-Йорк", GeoPoint(40.6413, -73.7781)),
+    City("Лос-Анджелес", GeoPoint(33.9416, -118.4085)),
+    City("Токио", GeoPoint(35.5494, 139.7798)),
+    City("Сидней", GeoPoint(-33.9399, 151.1753)),
+    City("Сан-Паулу", GeoPoint(-23.4356, -46.4731)),
+    City("Йоханнесбург", GeoPoint(-26.1392, 28.2460)),
+    City("Дубай", GeoPoint(25.2532, 55.3657)),
+    City("Сингапур", GeoPoint(1.3644, 103.9915)),
+    City("Пекин", GeoPoint(40.0799, 116.6031)),
+    City("Стамбул", GeoPoint(41.2753, 28.7519)),
+    City("Лондон", GeoPoint(51.4700, -0.4543)),
+    City("Париж", GeoPoint(49.0097, 2.5479)),
+    City("Каир", GeoPoint(30.1219, 31.4056)),
+    City("Дели", GeoPoint(28.5562, 77.1000)),
+    City("Буэнос-Айрес", GeoPoint(-34.8222, -58.5358)),
+    City("Ванкувер", GeoPoint(49.1939, -123.1844)),
+    City("Владивосток", GeoPoint(43.3990, 132.1477)),
+    City("Анкоридж", GeoPoint(61.1743, -149.9963))
+)
+
+private fun haversineKm(a: GeoPoint, b: GeoPoint): Double {
+    val earthRadiusKm = 6371.0
+    val dLat = Math.toRadians(b.latitude - a.latitude)
+    val dLon = Math.toRadians(b.longitude - a.longitude)
+    val lat1 = Math.toRadians(a.latitude)
+    val lat2 = Math.toRadians(b.latitude)
+
+    val h = sin(dLat / 2).pow(2) + cos(lat1) * cos(lat2) * sin(dLon / 2).pow(2)
+    return 2 * earthRadiusKm * asin(sqrt(h))
+}
+
+private fun farthestReachableCities(rangeKm: Int, limit: Int = 4): List<Pair<City, Double>> {
+    return worldCities
+        .map { city -> city to haversineKm(homeAirport, city.point) }
+        .filter { (_, distance) -> distance <= rangeKm }
+        .sortedByDescending { (_, distance) -> distance }
+        .take(limit)
+}
+
+// Вычисляет точки вдоль дуги большого круга между двумя координатами
+private fun greatCirclePoints(start: GeoPoint, end: GeoPoint, segments: Int = 64): List<GeoPoint> {
+    val lat1 = Math.toRadians(start.latitude)
+    val lon1 = Math.toRadians(start.longitude)
+    val lat2 = Math.toRadians(end.latitude)
+    val lon2 = Math.toRadians(end.longitude)
+
+    val d = 2 * asin(
+        sqrt(
+            sin((lat2 - lat1) / 2).pow(2) +
+                    cos(lat1) * cos(lat2) * sin((lon2 - lon1) / 2).pow(2)
+        )
+    )
+
+    if (d == 0.0) return listOf(start, end)
+
+    val points = mutableListOf<GeoPoint>()
+
+    for (i in 0..segments) {
+        val f = i.toDouble() / segments
+
+        val a = sin((1 - f) * d) / sin(d)
+        val b = sin(f * d) / sin(d)
+
+        val x = a * cos(lat1) * cos(lon1) + b * cos(lat2) * cos(lon2)
+        val y = a * cos(lat1) * sin(lon1) + b * cos(lat2) * sin(lon2)
+        val z = a * sin(lat1) + b * sin(lat2)
+
+        val lat = atan2(z, sqrt(x * x + y * y))
+        val lon = atan2(y, x)
+
+        points.add(GeoPoint(Math.toDegrees(lat), Math.toDegrees(lon)))
+    }
+
+    return points
+}
+
+@Composable
+fun AircraftCompareApp() {
+    var firstIndex by rememberSaveable { mutableStateOf(0) }
+    var secondIndex by rememberSaveable { mutableStateOf(4) }
+    var searchText by rememberSaveable { mutableStateOf("") }
+    var manufacturerFilter by rememberSaveable { mutableStateOf("Все") }
+    var darkTheme by rememberSaveable { mutableStateOf(false) }
+
+    val firstAircraft = aircraftList[firstIndex]
+    val secondAircraft = aircraftList[secondIndex]
+
+    val filteredAircraft = aircraftList
+        .mapIndexed { index, aircraft -> index to aircraft }
+        .filter { (_, aircraft) ->
+            val matchesSearch = aircraft.fullName.contains(searchText, ignoreCase = true)
+            val matchesManufacturer = manufacturerFilter == "Все" || aircraft.manufacturer == manufacturerFilter
+            matchesSearch && matchesManufacturer
+        }
+
+    AircraftTheme(darkTheme) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .systemBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                Header(
+                    darkTheme = darkTheme,
+                    onThemeChange = { darkTheme = !darkTheme }
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                TextField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Поиск самолёта") },
+                    placeholder = { Text("Например: A350 или Boeing") },
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(text = "Производитель", fontWeight = FontWeight.Bold)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ManufacturerFilters(
+                    selectedManufacturer = manufacturerFilter,
+                    onManufacturerSelected = { manufacturerFilter = it }
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                SelectionCard(
+                    firstAircraft = firstAircraft,
+                    secondAircraft = secondAircraft,
+                    options = filteredAircraft,
+                    onFirstSelected = { firstIndex = it },
+                    onSecondSelected = { secondIndex = it }
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(text = "Результат сравнения", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                ComparisonTable(first = firstAircraft, second = secondAircraft)
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(text = "Самые дальние маршруты", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "${firstAircraft.fullName}: дальность ${firstAircraft.rangeKm} км от $homeAirportName",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                AircraftMap(firstAircraft)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Дугами показаны самые дальние города, куда этот самолёт долетит без дозаправки.",
+                    fontSize = 12.sp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "© OpenStreetMap contributors, © CARTO",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AircraftTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
+    val colors = if (darkTheme) {
+        darkColorScheme(
+            primary = Color(0xFF90CAF9),
+            secondary = Color(0xFF64B5F6),
+            background = Color(0xFF101418),
+            surface = Color(0xFF1B2026)
+        )
+    } else {
+        lightColorScheme(
+            primary = Color(0xFF12355B),
+            secondary = Color(0xFF1976D2),
+            background = Color(0xFFF4F6F8),
+            surface = Color.White
+        )
+    }
+
+    MaterialTheme(colorScheme = colors, content = content)
+}
+
+@Composable
+fun Header(darkTheme: Boolean, onThemeChange: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Aircraft Compare",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(text = "Сравнение самолётов")
+        }
+
+        Button(onClick = onThemeChange) {
+            Text(text = if (darkTheme) "☀️" else "🌙", fontSize = 18.sp)
+        }
+    }
+}
+
+@Composable
+fun ManufacturerFilters(selectedManufacturer: String, onManufacturerSelected: (String) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        listOf("Все", "Boeing", "Airbus").forEach { manufacturer ->
+            Button(
+                onClick = { onManufacturerSelected(manufacturer) },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selectedManufacturer == manufacturer) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.Gray
+                    }
+                )
+            ) {
+                Text(manufacturer)
+            }
+        }
+    }
+}
+
+@Composable
+fun SelectionCard(
+    firstAircraft: Aircraft,
+    secondAircraft: Aircraft,
+    options: List<Pair<Int, Aircraft>>,
+    onFirstSelected: (Int) -> Unit,
+    onSecondSelected: (Int) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "Выбери самолёты", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AircraftSelector(
+                title = "Первый самолёт",
+                selected = firstAircraft,
+                options = options,
+                onSelected = onFirstSelected
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            AircraftSelector(
+                title = "Второй самолёт",
+                selected = secondAircraft,
+                options = options,
+                onSelected = onSecondSelected
+            )
+
+            if (options.isEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(text = "Самолёты не найдены", color = Color.Red)
+            }
+        }
+    }
+}
+
+@Composable
+fun AircraftSelector(
+    title: String,
+    selected: Aircraft,
+    options: List<Pair<Int, Aircraft>>,
+    onSelected: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column {
+        Text(text = title, fontWeight = FontWeight.Medium)
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+            Text(text = selected.fullName, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+            Text("▼")
+        }
+
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                val originalIndex = option.first
+                val aircraft = option.second
+
+                DropdownMenuItem(
+                    text = { Text(aircraft.fullName) },
+                    onClick = {
+                        onSelected(originalIndex)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ComparisonTable(first: Aircraft, second: Aircraft) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(text = "Параметр", modifier = Modifier.weight(1.2f), fontWeight = FontWeight.Bold)
+                Text(text = first.model, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text(text = second.model, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+
+            TextComparisonRow(title = "Производитель", left = first.manufacturer, right = second.manufacturer)
+            TextComparisonRow(title = "Мест", left = first.seats, right = second.seats)
+
+            NumberComparisonRow(
+                title = "Дальность",
+                leftText = "${first.rangeKm} км", rightText = "${second.rangeKm} км",
+                leftValue = first.rangeKm.toDouble(), rightValue = second.rangeKm.toDouble()
+            )
+            NumberComparisonRow(
+                title = "Длина",
+                leftText = "${first.lengthM} м", rightText = "${second.lengthM} м",
+                leftValue = first.lengthM, rightValue = second.lengthM
+            )
+            NumberComparisonRow(
+                title = "Размах",
+                leftText = "${first.wingspanM} м", rightText = "${second.wingspanM} м",
+                leftValue = first.wingspanM, rightValue = second.wingspanM
+            )
+            NumberComparisonRow(
+                title = "Макс. масса",
+                leftText = "${first.mtowKg} кг", rightText = "${second.mtowKg} кг",
+                leftValue = first.mtowKg.toDouble(), rightValue = second.mtowKg.toDouble()
+            )
+
+            TextComparisonRow(title = "Двигатели", left = first.engine, right = second.engine)
+        }
+    }
+}
+
+@Composable
+fun TextComparisonRow(title: String, left: String, right: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = title, modifier = Modifier.weight(1.2f), fontSize = 13.sp)
+        Text(text = left, modifier = Modifier.weight(1f), fontSize = 13.sp, textAlign = TextAlign.Center)
+        Text(text = right, modifier = Modifier.weight(1f), fontSize = 13.sp, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+fun NumberComparisonRow(title: String, leftText: String, rightText: String, leftValue: Double, rightValue: Double) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = title, modifier = Modifier.weight(1.2f), fontSize = 13.sp)
+        ValueCell(text = leftText, highlighted = leftValue > rightValue, modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.width(4.dp))
+        ValueCell(text = rightText, highlighted = rightValue > leftValue, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+fun ValueCell(text: String, highlighted: Boolean, modifier: Modifier) {
+    Text(
+        text = text,
+        modifier = modifier
+            .background(
+                color = if (highlighted) Color(0xFFDFF5E1) else Color.Transparent,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .padding(vertical = 6.dp, horizontal = 3.dp),
+        color = if (highlighted) Color(0xFF123D18) else MaterialTheme.colorScheme.onSurface,
+        textAlign = TextAlign.Center,
+        fontSize = 13.sp,
+        fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Normal
+    )
+}
+
+private val cartoTileSource = XYTileSource(
+    "CartoDBVoyager",
+    0, 19, 256, ".png",
+    arrayOf(
+        "https://a.basemaps.cartocdn.com/rastertiles/voyager/",
+        "https://b.basemaps.cartocdn.com/rastertiles/voyager/",
+        "https://c.basemaps.cartocdn.com/rastertiles/voyager/"
+    )
+)
+
+@Composable
+fun AircraftMap(aircraft: Aircraft) {
+    val context = LocalContext.current
+
+    val mapView = remember {
+        MapView(context).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+
+            setTileSource(cartoTileSource)
+            setMultiTouchControls(true)
+            controller.setZoom(3.0)
+            controller.setCenter(homeAirport)
+
+            setOnTouchListener { view, event ->
+                parent?.requestDisallowInterceptTouchEvent(true)
+                view.performClick()
+                false
+            }
+        }
+    }
+
+    DisposableEffect(mapView) {
+        onDispose { mapView.onDetach() }
+    }
+
+    LaunchedEffect(aircraft.fullName, aircraft.rangeKm) {
+        mapView.overlays.clear()
+
+        val homeMarker = Marker(mapView).apply {
+            position = homeAirport
+            title = homeAirportName
+        }
+        mapView.overlays.add(homeMarker)
+
+        val routes = farthestReachableCities(aircraft.rangeKm)
+
+        routes.forEach { (city, distance) ->
+            val line = Polyline(mapView).apply {
+                setPoints(greatCirclePoints(homeAirport, city.point))
+                outlinePaint.color = 0xFF1565C0.toInt()
+                outlinePaint.strokeWidth = 4f
+            }
+            mapView.overlays.add(line)
+
+            val marker = Marker(mapView).apply {
+                position = city.point
+                title = city.name
+                snippet = "${distance.roundToInt()} км от $homeAirportName"
+            }
+            mapView.overlays.add(marker)
+        }
+
+        mapView.invalidate()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(360.dp)
+            .clip(RoundedCornerShape(12.dp))
+    ) {
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}

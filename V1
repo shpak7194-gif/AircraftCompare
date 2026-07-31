@@ -1,13 +1,32 @@
 package com.example.myapplication
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.AirlineSeatReclineNormal
+import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.FitnessCenter
+import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -15,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -60,6 +80,44 @@ data class Aircraft(
         get() = "$manufacturer $model"
 }
 
+private enum class UnitSystem {
+    METRIC,
+    AVIATION
+}
+
+private const val KM_TO_NAUTICAL_MILES = 0.5399568
+private const val METERS_TO_FEET = 3.28084
+private const val KG_TO_POUNDS = 2.20462
+
+private fun formatDecimal(value: Double): String {
+    val rounded = (value * 10).roundToInt() / 10.0
+    return rounded
+        .toString()
+        .removeSuffix(".0")
+        .replace('.', ',')
+}
+
+private fun formatDistance(km: Double, unitSystem: UnitSystem): String {
+    return when (unitSystem) {
+        UnitSystem.METRIC -> "${km.roundToInt()} км"
+        UnitSystem.AVIATION -> "${(km * KM_TO_NAUTICAL_MILES).roundToInt()} NM"
+    }
+}
+
+private fun formatLength(meters: Double, unitSystem: UnitSystem): String {
+    return when (unitSystem) {
+        UnitSystem.METRIC -> "${formatDecimal(meters)} м"
+        UnitSystem.AVIATION -> "${formatDecimal(meters * METERS_TO_FEET)} ft"
+    }
+}
+
+private fun formatWeight(kg: Int, unitSystem: UnitSystem): String {
+    return when (unitSystem) {
+        UnitSystem.METRIC -> "$kg кг"
+        UnitSystem.AVIATION -> "${(kg * KG_TO_POUNDS).roundToInt()} lb"
+    }
+}
+
 private val aircraftList = listOf(
     Aircraft("Boeing", "737 MAX 8", "160–180, максимум 210", 6480, 39.5, 35.9, 82640, "2 × CFM LEAP-1B"),
     Aircraft("Boeing", "787-9 Dreamliner", "250–325, 2 класса", 15370, 62.8, 60.1, 259220, "GEnx-1B или Trent 1000"),
@@ -77,24 +135,131 @@ private const val homeAirportName = "Москва (SVO)"
 private data class City(val name: String, val point: GeoPoint)
 
 private val worldCities = listOf(
-    City("Нью-Йорк", GeoPoint(40.6413, -73.7781)),
-    City("Лос-Анджелес", GeoPoint(33.9416, -118.4085)),
-    City("Токио", GeoPoint(35.5494, 139.7798)),
-    City("Сидней", GeoPoint(-33.9399, 151.1753)),
-    City("Сан-Паулу", GeoPoint(-23.4356, -46.4731)),
-    City("Йоханнесбург", GeoPoint(-26.1392, 28.2460)),
-    City("Дубай", GeoPoint(25.2532, 55.3657)),
-    City("Сингапур", GeoPoint(1.3644, 103.9915)),
-    City("Пекин", GeoPoint(40.0799, 116.6031)),
-    City("Стамбул", GeoPoint(41.2753, 28.7519)),
-    City("Лондон", GeoPoint(51.4700, -0.4543)),
-    City("Париж", GeoPoint(49.0097, 2.5479)),
-    City("Каир", GeoPoint(30.1219, 31.4056)),
-    City("Дели", GeoPoint(28.5562, 77.1000)),
-    City("Буэнос-Айрес", GeoPoint(-34.8222, -58.5358)),
-    City("Ванкувер", GeoPoint(49.1939, -123.1844)),
-    City("Владивосток", GeoPoint(43.3990, 132.1477)),
-    City("Анкоридж", GeoPoint(61.1743, -149.9963))
+    // Европа
+    City("Лондон", GeoPoint(51.5074, -0.1278)),
+    City("Париж", GeoPoint(48.8566, 2.3522)),
+    City("Берлин", GeoPoint(52.5200, 13.4050)),
+    City("Мадрид", GeoPoint(40.4168, -3.7038)),
+    City("Рим", GeoPoint(41.9028, 12.4964)),
+    City("Амстердам", GeoPoint(52.3676, 4.9041)),
+    City("Вена", GeoPoint(48.2082, 16.3738)),
+    City("Прага", GeoPoint(50.0755, 14.4378)),
+    City("Варшава", GeoPoint(52.2297, 21.0122)),
+    City("Стамбул", GeoPoint(41.0082, 28.9784)),
+    City("Лиссабон", GeoPoint(38.7223, -9.1393)),
+    City("Афины", GeoPoint(37.9838, 23.7275)),
+    City("Будапешт", GeoPoint(47.4979, 19.0402)),
+    City("Стокгольм", GeoPoint(59.3293, 18.0686)),
+    City("Осло", GeoPoint(59.9139, 10.7522)),
+    City("Копенгаген", GeoPoint(55.6761, 12.5683)),
+    City("Хельсинки", GeoPoint(60.1699, 24.9384)),
+    City("Дублин", GeoPoint(53.3498, -6.2603)),
+    City("Брюссель", GeoPoint(50.8503, 4.3517)),
+    City("Цюрих", GeoPoint(47.3769, 8.5417)),
+    City("Милан", GeoPoint(45.4642, 9.1900)),
+    City("Барселона", GeoPoint(41.3874, 2.1686)),
+    City("Мюнхен", GeoPoint(48.1351, 11.5820)),
+    City("Киев", GeoPoint(50.4501, 30.5234)),
+    City("Минск", GeoPoint(53.9006, 27.5590)),
+    City("Бухарест", GeoPoint(44.4268, 26.1025)),
+    City("Белград", GeoPoint(44.7866, 20.4489)),
+    City("София", GeoPoint(42.6977, 23.3219)),
+    City("Рейкьявик", GeoPoint(64.1466, -21.9426)),
+
+    // Россия и СНГ
+    City("Санкт-Петербург", GeoPoint(59.9311, 30.3609)),
+    City("Новосибирск", GeoPoint(55.0084, 82.9357)),
+    City("Екатеринбург", GeoPoint(56.8389, 60.6057)),
+    City("Владивосток", GeoPoint(43.1155, 131.8855)),
+    City("Иркутск", GeoPoint(52.2871, 104.3050)),
+    City("Самара", GeoPoint(53.2415, 50.2212)),
+    City("Казань", GeoPoint(55.8304, 49.0661)),
+    City("Сочи", GeoPoint(43.5855, 39.7231)),
+    City("Алматы", GeoPoint(43.2220, 76.8512)),
+    City("Ташкент", GeoPoint(41.2995, 69.2401)),
+    City("Баку", GeoPoint(40.4093, 49.8671)),
+    City("Ереван", GeoPoint(40.1792, 44.4991)),
+    City("Тбилиси", GeoPoint(41.7151, 44.8271)),
+
+    // Азия
+    City("Токио", GeoPoint(35.6762, 139.6503)),
+    City("Пекин", GeoPoint(39.9042, 116.4074)),
+    City("Шанхай", GeoPoint(31.2304, 121.4737)),
+    City("Гонконг", GeoPoint(22.3193, 114.1694)),
+    City("Сингапур", GeoPoint(1.3521, 103.8198)),
+    City("Сеул", GeoPoint(37.5665, 126.9780)),
+    City("Дели", GeoPoint(28.6139, 77.2090)),
+    City("Мумбаи", GeoPoint(19.0760, 72.8777)),
+    City("Бангкок", GeoPoint(13.7563, 100.5018)),
+    City("Джакарта", GeoPoint(-6.2088, 106.8456)),
+    City("Куала-Лумпур", GeoPoint(3.1390, 101.6869)),
+    City("Манила", GeoPoint(14.5995, 120.9842)),
+    City("Дубай", GeoPoint(25.2048, 55.2708)),
+    City("Абу-Даби", GeoPoint(24.4539, 54.3773)),
+    City("Доха", GeoPoint(25.2854, 51.5310)),
+    City("Эр-Рияд", GeoPoint(24.7136, 46.6753)),
+    City("Тегеран", GeoPoint(35.6892, 51.3890)),
+    City("Тель-Авив", GeoPoint(32.0853, 34.7818)),
+    City("Ханой", GeoPoint(21.0278, 105.8342)),
+    City("Хошимин", GeoPoint(10.8231, 106.6297)),
+    City("Тайбэй", GeoPoint(25.0330, 121.5654)),
+    City("Осака", GeoPoint(34.6937, 135.5023)),
+    City("Карачи", GeoPoint(24.8607, 67.0011)),
+    City("Дакка", GeoPoint(23.8103, 90.4125)),
+    City("Коломбо", GeoPoint(6.9271, 79.8612)),
+    City("Ашхабад", GeoPoint(37.9601, 58.3261)),
+    City("Бишкек", GeoPoint(42.8746, 74.5698)),
+    City("Улан-Батор", GeoPoint(47.8864, 106.9057)),
+
+    // Африка
+    City("Каир", GeoPoint(30.0444, 31.2357)),
+    City("Йоханнесбург", GeoPoint(-26.2041, 28.0473)),
+    City("Кейптаун", GeoPoint(-33.9249, 18.4241)),
+    City("Лагос", GeoPoint(6.5244, 3.3792)),
+    City("Найроби", GeoPoint(-1.2921, 36.8219)),
+    City("Аддис-Абеба", GeoPoint(9.0320, 38.7469)),
+    City("Касабланка", GeoPoint(33.5731, -7.5898)),
+    City("Тунис", GeoPoint(36.8065, 10.1815)),
+    City("Алжир", GeoPoint(36.7538, 3.0588)),
+    City("Аккра", GeoPoint(5.6037, -0.1870)),
+    City("Дар-эс-Салам", GeoPoint(-6.7924, 39.2083)),
+
+    // Северная Америка
+    City("Нью-Йорк", GeoPoint(40.7128, -74.0060)),
+    City("Лос-Анджелес", GeoPoint(34.0522, -118.2437)),
+    City("Чикаго", GeoPoint(41.8781, -87.6298)),
+    City("Майами", GeoPoint(25.7617, -80.1918)),
+    City("Сан-Франциско", GeoPoint(37.7749, -122.4194)),
+    City("Хьюстон", GeoPoint(29.7604, -95.3698)),
+    City("Даллас", GeoPoint(32.7767, -96.7970)),
+    City("Бостон", GeoPoint(42.3601, -71.0589)),
+    City("Сиэтл", GeoPoint(47.6062, -122.3321)),
+    City("Вашингтон", GeoPoint(38.9072, -77.0369)),
+    City("Атланта", GeoPoint(33.7490, -84.3880)),
+    City("Ванкувер", GeoPoint(49.2827, -123.1207)),
+    City("Торонто", GeoPoint(43.6532, -79.3832)),
+    City("Монреаль", GeoPoint(45.5019, -73.5674)),
+    City("Мехико", GeoPoint(19.4326, -99.1332)),
+    City("Анкоридж", GeoPoint(61.2181, -149.9003)),
+    City("Гавайи (Гонолулу)", GeoPoint(21.3069, -157.8583)),
+
+    // Южная Америка
+    City("Сан-Паулу", GeoPoint(-23.5505, -46.6333)),
+    City("Рио-де-Жанейро", GeoPoint(-22.9068, -43.1729)),
+    City("Буэнос-Айрес", GeoPoint(-34.6037, -58.3816)),
+    City("Сантьяго", GeoPoint(-33.4489, -70.6693)),
+    City("Богота", GeoPoint(4.7110, -74.0721)),
+    City("Лима", GeoPoint(-12.0464, -77.0428)),
+    City("Каракас", GeoPoint(10.4806, -66.9036)),
+    City("Кито", GeoPoint(-0.1807, -78.4678)),
+    City("Монтевидео", GeoPoint(-34.9011, -56.1645)),
+
+    // Океания
+    City("Сидней", GeoPoint(-33.8688, 151.2093)),
+    City("Мельбурн", GeoPoint(-37.8136, 144.9631)),
+    City("Окленд", GeoPoint(-36.8485, 174.7633)),
+    City("Брисбен", GeoPoint(-27.4698, 153.0251)),
+    City("Перт", GeoPoint(-31.9505, 115.8605))
 )
 
 private fun haversineKm(a: GeoPoint, b: GeoPoint): Double {
@@ -110,6 +275,7 @@ private fun haversineKm(a: GeoPoint, b: GeoPoint): Double {
 
 private fun farthestReachableCities(rangeKm: Int, limit: Int = 4): List<Pair<City, Double>> {
     return worldCities
+        .distinctBy { it.name }
         .map { city -> city to haversineKm(homeAirport, city.point) }
         .filter { (_, distance) -> distance <= rangeKm }
         .sortedByDescending { (_, distance) -> distance }
@@ -153,13 +319,88 @@ private fun greatCirclePoints(start: GeoPoint, end: GeoPoint, segments: Int = 64
     return points
 }
 
+data class FavoritePair(val firstIndex: Int, val secondIndex: Int)
+
+private const val APP_PREFERENCES_NAME = "aircraft_compare_preferences"
+private const val FAVORITES_PREFERENCE_KEY = "favorite_pairs"
+private const val UNIT_SYSTEM_PREFERENCE_KEY = "unit_system"
+
+private fun loadFavoritePairs(context: Context): List<FavoritePair> {
+    val savedValue = context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .getString(FAVORITES_PREFERENCE_KEY, "")
+        .orEmpty()
+
+    return savedValue
+        .split(";")
+        .mapNotNull { savedPair ->
+            val indexes = savedPair.split(":", limit = 2)
+            val first = indexes.getOrNull(0)?.toIntOrNull()
+            val second = indexes.getOrNull(1)?.toIntOrNull()
+
+            if (
+                first != null &&
+                second != null &&
+                first in aircraftList.indices &&
+                second in aircraftList.indices
+            ) {
+                FavoritePair(first, second)
+            } else {
+                null
+            }
+        }
+        .distinct()
+}
+
+private fun saveFavoritePairs(context: Context, favorites: List<FavoritePair>) {
+    val valueToSave = favorites.joinToString(separator = ";") { pair ->
+        "${pair.firstIndex}:${pair.secondIndex}"
+    }
+
+    context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(FAVORITES_PREFERENCE_KEY, valueToSave)
+        .apply()
+}
+
+private fun loadUnitSystem(context: Context): UnitSystem {
+    val savedValue = context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .getString(UNIT_SYSTEM_PREFERENCE_KEY, UnitSystem.METRIC.name)
+
+    return UnitSystem.entries.firstOrNull { it.name == savedValue }
+        ?: UnitSystem.METRIC
+}
+
+private fun saveUnitSystem(context: Context, unitSystem: UnitSystem) {
+    context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(UNIT_SYSTEM_PREFERENCE_KEY, unitSystem.name)
+        .apply()
+}
+
 @Composable
 fun AircraftCompareApp() {
+    val context = LocalContext.current
+    val storageContext = context.applicationContext
+
     var firstIndex by rememberSaveable { mutableStateOf(0) }
     var secondIndex by rememberSaveable { mutableStateOf(4) }
     var searchText by rememberSaveable { mutableStateOf("") }
     var manufacturerFilter by rememberSaveable { mutableStateOf("Все") }
     var darkTheme by rememberSaveable { mutableStateOf(false) }
+    var cityQuery by rememberSaveable { mutableStateOf("") }
+    var unitSystem by remember(storageContext) {
+        mutableStateOf(loadUnitSystem(storageContext))
+    }
+
+    val favorites = remember(storageContext) {
+        mutableStateListOf<FavoritePair>().apply {
+            addAll(loadFavoritePairs(storageContext))
+        }
+    }
 
     val firstAircraft = aircraftList[firstIndex]
     val secondAircraft = aircraftList[secondIndex]
@@ -171,6 +412,13 @@ fun AircraftCompareApp() {
             val matchesManufacturer = manufacturerFilter == "Все" || aircraft.manufacturer == manufacturerFilter
             matchesSearch && matchesManufacturer
         }
+
+    val searchedCity = remember(cityQuery) {
+        if (cityQuery.isBlank()) null
+        else worldCities.firstOrNull { it.name.contains(cityQuery, ignoreCase = true) }
+    }
+
+    val isCurrentFavorite = favorites.any { it.firstIndex == firstIndex && it.secondIndex == secondIndex }
 
     AircraftTheme(darkTheme) {
         Surface(
@@ -189,6 +437,16 @@ fun AircraftCompareApp() {
                     onThemeChange = { darkTheme = !darkTheme }
                 )
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                UnitSystemSelector(
+                    selectedUnitSystem = unitSystem,
+                    onUnitSystemSelected = { selected ->
+                        unitSystem = selected
+                        saveUnitSystem(storageContext, selected)
+                    }
+                )
+
                 Spacer(modifier = Modifier.height(20.dp))
 
                 TextField(
@@ -197,12 +455,13 @@ fun AircraftCompareApp() {
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Поиск самолёта") },
                     placeholder = { Text("Например: A350 или Boeing") },
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp)
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text(text = "Производитель", fontWeight = FontWeight.Bold)
+                Text(text = "Производитель", style = MaterialTheme.typography.labelLarge)
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -223,33 +482,128 @@ fun AircraftCompareApp() {
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                Text(text = "Результат сравнения", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                if (favorites.isNotEmpty()) {
+                    FavoritesRow(
+                        favorites = favorites,
+                        onSelect = { pair ->
+                            firstIndex = pair.firstIndex
+                            secondIndex = pair.secondIndex
+                        },
+                        onRemove = { pair ->
+                            favorites.remove(pair)
+                            saveFavoritePairs(storageContext, favorites)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Результат сравнения",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    IconButton(
+                        onClick = {
+                            if (isCurrentFavorite) {
+                                favorites.removeAll { it.firstIndex == firstIndex && it.secondIndex == secondIndex }
+                            } else {
+                                favorites.add(FavoritePair(firstIndex, secondIndex))
+                            }
+                            saveFavoritePairs(storageContext, favorites)
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (isCurrentFavorite) Icons.Filled.Star else Icons.Outlined.Star,
+                            contentDescription = "В избранное",
+                            tint = if (isCurrentFavorite) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            val summary = buildShareText(
+                                first = firstAircraft,
+                                second = secondAircraft,
+                                unitSystem = unitSystem
+                            )
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, summary)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Поделиться сравнением"))
+                        }
+                    ) {
+                        Text("↗", fontSize = 20.sp)
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                ComparisonTable(first = firstAircraft, second = secondAircraft)
+                AnimatedContent(
+                    targetState = firstIndex to secondIndex,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "comparison_table"
+                ) { (first, second) ->
+                    ComparisonTable(
+                        first = aircraftList[first],
+                        second = aircraftList[second],
+                        unitSystem = unitSystem
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                Text(text = "Самые дальние маршруты", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Проверка города", style = MaterialTheme.typography.titleLarge)
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "${firstAircraft.fullName}: дальность ${firstAircraft.rangeKm} км от $homeAirportName",
+                    text = "Узнай, долетит ли ${firstAircraft.fullName} до нужного города, и увидь маршрут на карте ниже",
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                CityRangeChecker(
+                    query = cityQuery,
+                    onQueryChange = { cityQuery = it },
+                    matchedCity = searchedCity,
+                    aircraft = firstAircraft,
+                    unitSystem = unitSystem
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(text = "Самые дальние маршруты", style = MaterialTheme.typography.titleLarge)
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "${firstAircraft.fullName}: дальность ${
+                        formatDistance(firstAircraft.rangeKm.toDouble(), unitSystem)
+                    } от $homeAirportName",
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                AircraftMap(firstAircraft)
+                AircraftMap(
+                    aircraft = firstAircraft,
+                    searchedCity = searchedCity,
+                    unitSystem = unitSystem
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Дугами показаны самые дальние города, куда этот самолёт долетит без дозаправки.",
-                    fontSize = 12.sp
+                    text = "Синим — самые дальние маршруты. Оранжевым — город из поиска выше.",
+                    style = MaterialTheme.typography.bodySmall
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -261,6 +615,27 @@ fun AircraftCompareApp() {
                 )
             }
         }
+    }
+}
+
+private fun buildShareText(
+    first: Aircraft,
+    second: Aircraft,
+    unitSystem: UnitSystem
+): String {
+    return buildString {
+        appendLine("Сравнение самолётов: ${first.fullName} vs ${second.fullName}")
+        appendLine(
+            "Дальность: ${formatDistance(first.rangeKm.toDouble(), unitSystem)} vs ${
+                formatDistance(second.rangeKm.toDouble(), unitSystem)
+            }"
+        )
+        appendLine("Вместимость: ${first.seats} vs ${second.seats}")
+        appendLine(
+            "Макс. масса: ${formatWeight(first.mtowKg, unitSystem)} vs ${
+                formatWeight(second.mtowKg, unitSystem)
+            }"
+        )
     }
 }
 
@@ -282,7 +657,16 @@ fun AircraftTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
         )
     }
 
-    MaterialTheme(colorScheme = colors, content = content)
+    val typography = Typography(
+        titleLarge = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
+        titleMedium = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 17.sp),
+        bodyLarge = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
+        bodyMedium = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+        bodySmall = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, color = Color.Gray),
+        labelLarge = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    )
+
+    MaterialTheme(colorScheme = colors, typography = typography, content = content)
 }
 
 @Composable
@@ -298,11 +682,63 @@ fun Header(darkTheme: Boolean, onThemeChange: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-            Text(text = "Сравнение самолётов")
+            Text(text = "Сравнение самолётов", style = MaterialTheme.typography.bodySmall)
         }
 
-        Button(onClick = onThemeChange) {
+        FilledIconButton(onClick = onThemeChange) {
             Text(text = if (darkTheme) "☀️" else "🌙", fontSize = 18.sp)
+        }
+    }
+}
+
+@Composable
+private fun UnitSystemSelector(
+    selectedUnitSystem: UnitSystem,
+    onUnitSystemSelected: (UnitSystem) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        UnitSystem.entries.forEach { unitSystem ->
+            val selected = unitSystem == selectedUnitSystem
+            val title = if (unitSystem == UnitSystem.METRIC) {
+                "Метрические"
+            } else {
+                "Авиационные"
+            }
+            val units = if (unitSystem == UnitSystem.METRIC) {
+                "км · м · кг"
+            } else {
+                "NM · ft · lb"
+            }
+
+            Button(
+                onClick = { onUnitSystemSelected(unitSystem) },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    contentColor = if (selected) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    )
+                    Text(text = units, fontSize = 10.sp)
+                }
+            }
         }
     }
 }
@@ -314,20 +750,33 @@ fun ManufacturerFilters(selectedManufacturer: String, onManufacturerSelected: (S
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         listOf("Все", "Boeing", "Airbus").forEach { manufacturer ->
+            val selected = selectedManufacturer == manufacturer
+
             Button(
                 onClick = { onManufacturerSelected(manufacturer) },
                 modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedManufacturer == manufacturer) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        Color.Gray
-                    }
+                    containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             ) {
                 Text(manufacturer)
             }
         }
+    }
+}
+
+@Composable
+fun ManufacturerBadge(manufacturer: String) {
+    val color = if (manufacturer == "Boeing") Color(0xFF1565C0) else Color(0xFFC62828)
+
+    Box(
+        modifier = Modifier
+            .background(color.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Text(text = manufacturer, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color)
     }
 }
 
@@ -341,10 +790,12 @@ fun SelectionCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Выбери самолёты", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(text = "Выбери самолёты", style = MaterialTheme.typography.titleLarge)
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -382,11 +833,17 @@ fun AircraftSelector(
     var expanded by remember { mutableStateOf(false) }
 
     Column {
-        Text(text = title, fontWeight = FontWeight.Medium)
+        Text(text = title, style = MaterialTheme.typography.labelLarge)
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            ManufacturerBadge(selected.manufacturer)
+            Spacer(modifier = Modifier.width(8.dp))
             Text(text = selected.fullName, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
             Text("▼")
         }
@@ -409,68 +866,184 @@ fun AircraftSelector(
 }
 
 @Composable
-fun ComparisonTable(first: Aircraft, second: Aircraft) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(modifier = Modifier.fillMaxWidth()) {
-                Text(text = "Параметр", modifier = Modifier.weight(1.2f), fontWeight = FontWeight.Bold)
-                Text(text = first.model, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                Text(text = second.model, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+fun FavoritesRow(
+    favorites: List<FavoritePair>,
+    onSelect: (FavoritePair) -> Unit,
+    onRemove: (FavoritePair) -> Unit
+) {
+    Column {
+        Text(text = "Избранные сравнения", style = MaterialTheme.typography.labelLarge)
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            favorites.forEach { pair ->
+                val first = aircraftList[pair.firstIndex]
+                val second = aircraftList[pair.secondIndex]
+
+                AssistChip(
+                    onClick = { onSelect(pair) },
+                    label = { Text("${first.model} vs ${second.model}") },
+                    trailingIcon = {
+                        Text(
+                            text = "✕",
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable { onRemove(pair) }
+                                .padding(2.dp)
+                        )
+                    }
+                )
             }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
-
-            TextComparisonRow(title = "Производитель", left = first.manufacturer, right = second.manufacturer)
-            TextComparisonRow(title = "Мест", left = first.seats, right = second.seats)
-
-            NumberComparisonRow(
-                title = "Дальность",
-                leftText = "${first.rangeKm} км", rightText = "${second.rangeKm} км",
-                leftValue = first.rangeKm.toDouble(), rightValue = second.rangeKm.toDouble()
-            )
-            NumberComparisonRow(
-                title = "Длина",
-                leftText = "${first.lengthM} м", rightText = "${second.lengthM} м",
-                leftValue = first.lengthM, rightValue = second.lengthM
-            )
-            NumberComparisonRow(
-                title = "Размах",
-                leftText = "${first.wingspanM} м", rightText = "${second.wingspanM} м",
-                leftValue = first.wingspanM, rightValue = second.wingspanM
-            )
-            NumberComparisonRow(
-                title = "Макс. масса",
-                leftText = "${first.mtowKg} кг", rightText = "${second.mtowKg} кг",
-                leftValue = first.mtowKg.toDouble(), rightValue = second.mtowKg.toDouble()
-            )
-
-            TextComparisonRow(title = "Двигатели", left = first.engine, right = second.engine)
         }
     }
 }
 
 @Composable
-fun TextComparisonRow(title: String, left: String, right: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun ComparisonTable(
+    first: Aircraft,
+    second: Aircraft,
+    unitSystem: UnitSystem
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Text(text = title, modifier = Modifier.weight(1.2f), fontSize = 13.sp)
-        Text(text = left, modifier = Modifier.weight(1f), fontSize = 13.sp, textAlign = TextAlign.Center)
-        Text(text = right, modifier = Modifier.weight(1f), fontSize = 13.sp, textAlign = TextAlign.Center)
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(text = "Параметр", modifier = Modifier.weight(1.2f), style = MaterialTheme.typography.labelLarge)
+                Text(text = first.model, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+                Text(text = second.model, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+
+            TextComparisonRow(
+                icon = Icons.Outlined.Business,
+                title = "Производитель",
+                left = first.manufacturer,
+                right = second.manufacturer
+            )
+
+            TextComparisonRow(
+                icon = Icons.Outlined.AirlineSeatReclineNormal,
+                title = "Мест",
+                left = first.seats,
+                right = second.seats
+            )
+
+            NumberComparisonRow(
+                icon = Icons.Outlined.Map,
+                title = "Дальность",
+                leftText = formatDistance(first.rangeKm.toDouble(), unitSystem),
+                rightText = formatDistance(second.rangeKm.toDouble(), unitSystem),
+                leftValue = first.rangeKm.toDouble(), rightValue = second.rangeKm.toDouble()
+            )
+            NumberComparisonRow(
+                icon = Icons.Outlined.Straighten,
+                title = "Длина",
+                leftText = formatLength(first.lengthM, unitSystem),
+                rightText = formatLength(second.lengthM, unitSystem),
+                leftValue = first.lengthM, rightValue = second.lengthM
+            )
+            NumberComparisonRow(
+                icon = Icons.Outlined.Flight,
+                title = "Размах",
+                leftText = formatLength(first.wingspanM, unitSystem),
+                rightText = formatLength(second.wingspanM, unitSystem),
+                leftValue = first.wingspanM, rightValue = second.wingspanM
+            )
+            NumberComparisonRow(
+                icon = Icons.Outlined.FitnessCenter,
+                title = "Макс. масса",
+                leftText = formatWeight(first.mtowKg, unitSystem),
+                rightText = formatWeight(second.mtowKg, unitSystem),
+                leftValue = first.mtowKg.toDouble(), rightValue = second.mtowKg.toDouble()
+            )
+
+            TextComparisonRow(
+                icon = Icons.Outlined.Settings,
+                title = "Двигатели",
+                left = first.engine,
+                right = second.engine
+            )
+        }
     }
 }
 
 @Composable
-fun NumberComparisonRow(title: String, leftText: String, rightText: String, leftValue: Double, rightValue: Double) {
+private fun ParameterLabel(
+    icon: ImageVector,
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+fun TextComparisonRow(
+    icon: ImageVector,
+    title: String,
+    left: String,
+    right: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ParameterLabel(
+            icon = icon,
+            title = title,
+            modifier = Modifier.weight(1.2f)
+        )
+        Text(text = left, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+        Text(text = right, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+fun NumberComparisonRow(
+    icon: ImageVector,
+    title: String,
+    leftText: String,
+    rightText: String,
+    leftValue: Double,
+    rightValue: Double
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = title, modifier = Modifier.weight(1.2f), fontSize = 13.sp)
+        ParameterLabel(
+            icon = icon,
+            title = title,
+            modifier = Modifier.weight(1.2f)
+        )
         ValueCell(text = leftText, highlighted = leftValue > rightValue, modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.width(4.dp))
         ValueCell(text = rightText, highlighted = rightValue > leftValue, modifier = Modifier.weight(1f))
@@ -494,6 +1067,61 @@ fun ValueCell(text: String, highlighted: Boolean, modifier: Modifier) {
     )
 }
 
+@Composable
+private fun CityRangeChecker(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    matchedCity: City?,
+    aircraft: Aircraft,
+    unitSystem: UnitSystem
+) {
+    val distance = matchedCity?.let { haversineKm(homeAirport, it.point) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Введи город") },
+                placeholder = { Text("Например: Токио, Дубай, Мадрид") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            if (query.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (matchedCity == null) {
+                    Text(
+                        text = "Город не найден в базе (~130 крупных городов мира). Попробуй другое написание.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else if (distance != null) {
+                    val reachable = distance <= aircraft.rangeKm
+                    val color = if (reachable) Color(0xFF2E7D32) else Color(0xFFC62828)
+                    val statusText = if (reachable) "Долетит ✓" else "Не долетит без дозаправки ✕"
+
+                    Text(
+                        text = "$statusText — расстояние ${
+                            formatDistance(distance, unitSystem)
+                        }, дальность самолёта ${
+                            formatDistance(aircraft.rangeKm.toDouble(), unitSystem)
+                        }",
+                        color = color,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
 private val cartoTileSource = XYTileSource(
     "CartoDBVoyager",
     0, 19, 256, ".png",
@@ -505,7 +1133,11 @@ private val cartoTileSource = XYTileSource(
 )
 
 @Composable
-fun AircraftMap(aircraft: Aircraft) {
+private fun AircraftMap(
+    aircraft: Aircraft,
+    searchedCity: City?,
+    unitSystem: UnitSystem
+) {
     val context = LocalContext.current
 
     val mapView = remember {
@@ -532,7 +1164,7 @@ fun AircraftMap(aircraft: Aircraft) {
         onDispose { mapView.onDetach() }
     }
 
-    LaunchedEffect(aircraft.fullName, aircraft.rangeKm) {
+    LaunchedEffect(aircraft.fullName, aircraft.rangeKm, searchedCity, unitSystem) {
         mapView.overlays.clear()
 
         val homeMarker = Marker(mapView).apply {
@@ -554,9 +1186,28 @@ fun AircraftMap(aircraft: Aircraft) {
             val marker = Marker(mapView).apply {
                 position = city.point
                 title = city.name
-                snippet = "${distance.roundToInt()} км от $homeAirportName"
+                snippet = "${formatDistance(distance, unitSystem)} от $homeAirportName"
             }
             mapView.overlays.add(marker)
+        }
+
+        // Маршрут из поиска — отдельным цветом поверх остальных
+        if (searchedCity != null) {
+            val searchedLine = Polyline(mapView).apply {
+                setPoints(greatCirclePoints(homeAirport, searchedCity.point))
+                outlinePaint.color = 0xFFEF6C00.toInt()
+                outlinePaint.strokeWidth = 6f
+            }
+            mapView.overlays.add(searchedLine)
+
+            val searchedMarker = Marker(mapView).apply {
+                position = searchedCity.point
+                title = searchedCity.name
+                snippet = "Из поиска"
+            }
+            mapView.overlays.add(searchedMarker)
+
+            mapView.controller.animateTo(searchedCity.point)
         }
 
         mapView.invalidate()
@@ -566,7 +1217,7 @@ fun AircraftMap(aircraft: Aircraft) {
         modifier = Modifier
             .fillMaxWidth()
             .height(360.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
     ) {
         AndroidView(
             factory = { mapView },

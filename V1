@@ -2,6 +2,11 @@ package com.example.myapplication
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
@@ -12,6 +17,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,21 +27,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AirlineSeatReclineNormal
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Height
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LocalGasStation
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Straighten
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -58,6 +68,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import kotlinx.coroutines.delay
 import kotlin.math.*
 
 class MainActivity : ComponentActivity() {
@@ -1057,6 +1068,17 @@ private const val homeAirportName = "Москва (SVO)"
 
 private data class City(val name: String, val point: GeoPoint)
 
+private data class RouteAirport(
+    val city: String,
+    val code: String,
+    val airportName: String,
+    val region: String,
+    val point: GeoPoint
+) {
+    val displayName: String
+        get() = "$city ($code)"
+}
+
 private val worldCities = listOf(
     // Европа
     City("Лондон", GeoPoint(51.5074, -0.1278)),
@@ -1185,6 +1207,90 @@ private val worldCities = listOf(
     City("Перт", GeoPoint(-31.9505, 115.8605))
 )
 
+private val routeAirports = listOf(
+    RouteAirport("Москва", "SVO", "Шереметьево", "Россия и СНГ", GeoPoint(55.9726, 37.4146)),
+    RouteAirport("Санкт-Петербург", "LED", "Пулково", "Россия и СНГ", GeoPoint(59.8003, 30.2625)),
+    RouteAirport("Екатеринбург", "SVX", "Кольцово", "Россия и СНГ", GeoPoint(56.7431, 60.8027)),
+    RouteAirport("Новосибирск", "OVB", "Толмачёво", "Россия и СНГ", GeoPoint(55.0126, 82.6507)),
+    RouteAirport("Владивосток", "VVO", "Кневичи", "Россия и СНГ", GeoPoint(43.3989, 132.1480)),
+    RouteAirport("Иркутск", "IKT", "Иркутск", "Россия и СНГ", GeoPoint(52.2680, 104.3889)),
+    RouteAirport("Сочи", "AER", "Сочи", "Россия и СНГ", GeoPoint(43.4499, 39.9566)),
+    RouteAirport("Казань", "KZN", "Казань", "Россия и СНГ", GeoPoint(55.6062, 49.2787)),
+    RouteAirport("Алматы", "ALA", "Алматы", "Россия и СНГ", GeoPoint(43.3521, 77.0405)),
+    RouteAirport("Ташкент", "TAS", "Ташкент", "Россия и СНГ", GeoPoint(41.2579, 69.2812)),
+    RouteAirport("Баку", "GYD", "Гейдар Алиев", "Россия и СНГ", GeoPoint(40.4675, 50.0467)),
+    RouteAirport("Ереван", "EVN", "Звартноц", "Россия и СНГ", GeoPoint(40.1473, 44.3959)),
+    RouteAirport("Тбилиси", "TBS", "Тбилиси", "Россия и СНГ", GeoPoint(41.6692, 44.9547)),
+
+    RouteAirport("Хельсинки", "HEL", "Вантаа", "Европа", GeoPoint(60.3172, 24.9633)),
+    RouteAirport("Лондон", "LHR", "Хитроу", "Европа", GeoPoint(51.4700, -0.4543)),
+    RouteAirport("Париж", "CDG", "Шарль-де-Голль", "Европа", GeoPoint(49.0097, 2.5479)),
+    RouteAirport("Франкфурт", "FRA", "Франкфурт", "Европа", GeoPoint(50.0379, 8.5622)),
+    RouteAirport("Амстердам", "AMS", "Схипхол", "Европа", GeoPoint(52.3105, 4.7683)),
+    RouteAirport("Мадрид", "MAD", "Барахас", "Европа", GeoPoint(40.4983, -3.5676)),
+    RouteAirport("Рим", "FCO", "Фьюмичино", "Европа", GeoPoint(41.8003, 12.2389)),
+    RouteAirport("Стамбул", "IST", "Стамбул", "Европа", GeoPoint(41.2753, 28.7519)),
+    RouteAirport("Афины", "ATH", "Элефтериос Венизелос", "Европа", GeoPoint(37.9364, 23.9445)),
+    RouteAirport("Дублин", "DUB", "Дублин", "Европа", GeoPoint(53.4213, -6.2701)),
+    RouteAirport("Осло", "OSL", "Гардермуэн", "Европа", GeoPoint(60.1939, 11.1004)),
+    RouteAirport("Стокгольм", "ARN", "Арланда", "Европа", GeoPoint(59.6519, 17.9186)),
+    RouteAirport("Копенгаген", "CPH", "Каструп", "Европа", GeoPoint(55.6181, 12.6560)),
+    RouteAirport("Варшава", "WAW", "Шопен", "Европа", GeoPoint(52.1657, 20.9671)),
+    RouteAirport("Вена", "VIE", "Швехат", "Европа", GeoPoint(48.1103, 16.5697)),
+    RouteAirport("Цюрих", "ZRH", "Клотен", "Европа", GeoPoint(47.4581, 8.5555)),
+
+    RouteAirport("Дубай", "DXB", "Дубай", "Азия и Ближний Восток", GeoPoint(25.2532, 55.3657)),
+    RouteAirport("Абу-Даби", "AUH", "Заид", "Азия и Ближний Восток", GeoPoint(24.4330, 54.6511)),
+    RouteAirport("Доха", "DOH", "Хамад", "Азия и Ближний Восток", GeoPoint(25.2731, 51.6081)),
+    RouteAirport("Дели", "DEL", "Индира Ганди", "Азия и Ближний Восток", GeoPoint(28.5562, 77.1000)),
+    RouteAirport("Мумбаи", "BOM", "Чатрапати Шиваджи", "Азия и Ближний Восток", GeoPoint(19.0896, 72.8656)),
+    RouteAirport("Сингапур", "SIN", "Чанги", "Азия и Ближний Восток", GeoPoint(1.3644, 103.9915)),
+    RouteAirport("Бангкок", "BKK", "Суварнабхуми", "Азия и Ближний Восток", GeoPoint(13.6900, 100.7501)),
+    RouteAirport("Гонконг", "HKG", "Чхеклапкок", "Азия и Ближний Восток", GeoPoint(22.3080, 113.9185)),
+    RouteAirport("Пекин", "PEK", "Шоуду", "Азия и Ближний Восток", GeoPoint(40.0799, 116.6031)),
+    RouteAirport("Шанхай", "PVG", "Пудун", "Азия и Ближний Восток", GeoPoint(31.1443, 121.8083)),
+    RouteAirport("Токио", "HND", "Ханэда", "Азия и Ближний Восток", GeoPoint(35.5494, 139.7798)),
+    RouteAirport("Сеул", "ICN", "Инчхон", "Азия и Ближний Восток", GeoPoint(37.4602, 126.4407)),
+    RouteAirport("Куала-Лумпур", "KUL", "Куала-Лумпур", "Азия и Ближний Восток", GeoPoint(2.7456, 101.7072)),
+    RouteAirport("Манила", "MNL", "Ниной Акино", "Азия и Ближний Восток", GeoPoint(14.5086, 121.0198)),
+    RouteAirport("Джакарта", "CGK", "Сукарно-Хатта", "Азия и Ближний Восток", GeoPoint(-6.1256, 106.6559)),
+    RouteAirport("Хошимин", "SGN", "Таншоннят", "Азия и Ближний Восток", GeoPoint(10.8188, 106.6520)),
+    RouteAirport("Тайбэй", "TPE", "Таоюань", "Азия и Ближний Восток", GeoPoint(25.0797, 121.2342)),
+
+    RouteAirport("Каир", "CAI", "Каир", "Африка", GeoPoint(30.1219, 31.4056)),
+    RouteAirport("Йоханнесбург", "JNB", "О. Р. Тамбо", "Африка", GeoPoint(-26.1337, 28.2420)),
+    RouteAirport("Кейптаун", "CPT", "Кейптаун", "Африка", GeoPoint(-33.9700, 18.6021)),
+    RouteAirport("Найроби", "NBO", "Джомо Кениата", "Африка", GeoPoint(-1.3192, 36.9278)),
+    RouteAirport("Аддис-Абеба", "ADD", "Боле", "Африка", GeoPoint(8.9779, 38.7993)),
+    RouteAirport("Касабланка", "CMN", "Мухаммед V", "Африка", GeoPoint(33.3675, -7.58997)),
+    RouteAirport("Лагос", "LOS", "Муртала Мухаммед", "Африка", GeoPoint(6.5774, 3.3212)),
+
+    RouteAirport("Нью-Йорк", "JFK", "Джон Кеннеди", "Америка", GeoPoint(40.6413, -73.7781)),
+    RouteAirport("Лос-Анджелес", "LAX", "Лос-Анджелес", "Америка", GeoPoint(33.9416, -118.4085)),
+    RouteAirport("Чикаго", "ORD", "О'Хара", "Америка", GeoPoint(41.9742, -87.9073)),
+    RouteAirport("Майами", "MIA", "Майами", "Америка", GeoPoint(25.7959, -80.2870)),
+    RouteAirport("Сан-Франциско", "SFO", "Сан-Франциско", "Америка", GeoPoint(37.6213, -122.3790)),
+    RouteAirport("Сиэтл", "SEA", "Сиэтл-Такома", "Америка", GeoPoint(47.4502, -122.3088)),
+    RouteAirport("Атланта", "ATL", "Хартсфилд-Джексон", "Америка", GeoPoint(33.6407, -84.4277)),
+    RouteAirport("Торонто", "YYZ", "Пирсон", "Америка", GeoPoint(43.6777, -79.6248)),
+    RouteAirport("Ванкувер", "YVR", "Ванкувер", "Америка", GeoPoint(49.1967, -123.1815)),
+    RouteAirport("Мехико", "MEX", "Бенито Хуарес", "Америка", GeoPoint(19.4361, -99.0719)),
+    RouteAirport("Сан-Паулу", "GRU", "Гуарульюс", "Америка", GeoPoint(-23.4356, -46.4731)),
+    RouteAirport("Рио-де-Жанейро", "GIG", "Галеан", "Америка", GeoPoint(-22.8090, -43.2506)),
+    RouteAirport("Буэнос-Айрес", "EZE", "Эсейса", "Америка", GeoPoint(-34.8222, -58.5358)),
+    RouteAirport("Сантьяго", "SCL", "Артуро Мерино Бенитес", "Америка", GeoPoint(-33.3930, -70.7858)),
+    RouteAirport("Богота", "BOG", "Эль-Дорадо", "Америка", GeoPoint(4.7016, -74.1469)),
+    RouteAirport("Лима", "LIM", "Хорхе Чавес", "Америка", GeoPoint(-12.0219, -77.1143)),
+    RouteAirport("Гонолулу", "HNL", "Дэниел Иноуэ", "Америка", GeoPoint(21.3187, -157.9225)),
+    RouteAirport("Анкоридж", "ANC", "Тед Стивенс", "Америка", GeoPoint(61.1743, -149.9983)),
+
+    RouteAirport("Сидней", "SYD", "Кингсфорд Смит", "Океания", GeoPoint(-33.9399, 151.1753)),
+    RouteAirport("Мельбурн", "MEL", "Тулламарин", "Океания", GeoPoint(-37.6690, 144.8410)),
+    RouteAirport("Окленд", "AKL", "Окленд", "Океания", GeoPoint(-37.0082, 174.7850)),
+    RouteAirport("Брисбен", "BNE", "Брисбен", "Океания", GeoPoint(-27.3842, 153.1175)),
+    RouteAirport("Перт", "PER", "Перт", "Океания", GeoPoint(-31.9403, 115.9672))
+)
+
 private fun haversineKm(a: GeoPoint, b: GeoPoint): Double {
     val earthRadiusKm = 6371.0
     val dLat = Math.toRadians(b.latitude - a.latitude)
@@ -1194,6 +1300,74 @@ private fun haversineKm(a: GeoPoint, b: GeoPoint): Double {
 
     val h = sin(dLat / 2).pow(2) + cos(lat1) * cos(lat2) * sin(dLon / 2).pow(2)
     return 2 * earthRadiusKm * asin(sqrt(h))
+}
+
+private enum class RouteMapMode {
+    ROUTE,
+    REACHABLE
+}
+
+private enum class RouteStatus {
+    COMFORTABLE,
+    TIGHT,
+    INSUFFICIENT
+}
+
+private fun routeStatus(distanceKm: Double, rangeKm: Int): RouteStatus {
+    return when {
+        distanceKm > rangeKm -> RouteStatus.INSUFFICIENT
+        distanceKm > rangeKm * 0.9 -> RouteStatus.TIGHT
+        else -> RouteStatus.COMFORTABLE
+    }
+}
+
+private fun routeStatusColor(status: RouteStatus): Color {
+    return when (status) {
+        RouteStatus.COMFORTABLE -> Color(0xFF2E7D32)
+        RouteStatus.TIGHT -> Color(0xFFF57F17)
+        RouteStatus.INSUFFICIENT -> Color(0xFFC62828)
+    }
+}
+
+private fun routeStatusMapColor(status: RouteStatus): Int {
+    return when (status) {
+        RouteStatus.COMFORTABLE -> 0xFF2E7D32.toInt()
+        RouteStatus.TIGHT -> 0xFFF9A825.toInt()
+        RouteStatus.INSUFFICIENT -> 0xFFC62828.toInt()
+    }
+}
+
+private fun estimatedFlightMinutes(distanceKm: Double, cruiseSpeedKmh: Int): Int {
+    val cruiseMinutes = distanceKm / cruiseSpeedKmh * 60.0
+    val groundAndClimbMinutes = when {
+        distanceKm < 800 -> 35
+        distanceKm < 3000 -> 45
+        else -> 55
+    }
+    return cruiseMinutes.roundToInt() + groundAndClimbMinutes
+}
+
+private fun formatFlightTime(totalMinutes: Int): String {
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    return if (hours == 0) "$minutes мин" else "$hours ч ${minutes.toString().padStart(2, '0')} мин"
+}
+
+private fun pointAlongRoute(points: List<GeoPoint>, progress: Float): GeoPoint {
+    if (points.isEmpty()) return homeAirport
+    if (points.size == 1) return points.first()
+
+    val scaledIndex = progress.coerceIn(0f, 1f) * (points.lastIndex)
+    val lowerIndex = floor(scaledIndex).toInt().coerceIn(0, points.lastIndex)
+    val upperIndex = ceil(scaledIndex).toInt().coerceIn(0, points.lastIndex)
+    val fraction = scaledIndex - lowerIndex
+    val lower = points[lowerIndex]
+    val upper = points[upperIndex]
+
+    return GeoPoint(
+        lower.latitude + (upper.latitude - lower.latitude) * fraction,
+        lower.longitude + (upper.longitude - lower.longitude) * fraction
+    )
 }
 
 private fun farthestReachableCities(rangeKm: Int, limit: Int = 4): List<Pair<City, Double>> {
@@ -1249,6 +1423,8 @@ private const val FAVORITES_PREFERENCE_KEY = "favorite_pairs"
 private const val UNIT_SYSTEM_PREFERENCE_KEY = "unit_system"
 private const val DARK_THEME_PREFERENCE_KEY = "dark_theme"
 private const val ROUTE_AIRCRAFT_PREFERENCE_KEY = "route_aircraft_index"
+private const val ROUTE_ORIGIN_PREFERENCE_KEY = "route_origin_code"
+private const val ROUTE_DESTINATION_PREFERENCE_KEY = "route_destination_code"
 
 private fun loadFavoritePairs(context: Context): List<FavoritePair> {
     val savedValue = context
@@ -1336,6 +1512,33 @@ private fun saveRouteAircraftIndex(context: Context, aircraftIndex: Int) {
         .apply()
 }
 
+private fun loadRouteAirportIndex(
+    context: Context,
+    preferenceKey: String,
+    defaultCode: String
+): Int {
+    val savedCode = context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .getString(preferenceKey, defaultCode)
+        .orEmpty()
+
+    return routeAirports.indexOfFirst { it.code == savedCode }
+        .takeIf { it >= 0 }
+        ?: routeAirports.indexOfFirst { it.code == defaultCode }.coerceAtLeast(0)
+}
+
+private fun saveRouteAirport(
+    context: Context,
+    preferenceKey: String,
+    airport: RouteAirport
+) {
+    context
+        .getSharedPreferences(APP_PREFERENCES_NAME, Context.MODE_PRIVATE)
+        .edit()
+        .putString(preferenceKey, airport.code)
+        .apply()
+}
+
 @Composable
 fun AircraftCompareApp() {
     val context = LocalContext.current
@@ -1348,7 +1551,6 @@ fun AircraftCompareApp() {
     var darkTheme by remember(storageContext) {
         mutableStateOf(loadDarkTheme(storageContext))
     }
-    var cityQuery by rememberSaveable { mutableStateOf("") }
     var detailAircraftIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var comparisonSectionName by rememberSaveable {
         mutableStateOf(ComparisonSection.PARAMETERS.name)
@@ -1358,6 +1560,30 @@ fun AircraftCompareApp() {
     }
     var routeAircraftIndex by remember(storageContext) {
         mutableStateOf(loadRouteAircraftIndex(storageContext))
+    }
+    var routeOriginIndex by remember(storageContext) {
+        mutableStateOf(
+            loadRouteAirportIndex(
+                storageContext,
+                ROUTE_ORIGIN_PREFERENCE_KEY,
+                "SVO"
+            )
+        )
+    }
+    var routeDestinationIndex by remember(storageContext) {
+        mutableStateOf(
+            loadRouteAirportIndex(
+                storageContext,
+                ROUTE_DESTINATION_PREFERENCE_KEY,
+                "DXB"
+            )
+        )
+    }
+    var routeMapModeName by rememberSaveable {
+        mutableStateOf(RouteMapMode.ROUTE.name)
+    }
+    var airportSelectionTarget by rememberSaveable {
+        mutableStateOf<String?>(null)
     }
 
     val favorites = remember(storageContext) {
@@ -1369,6 +1595,9 @@ fun AircraftCompareApp() {
     val firstAircraft = aircraftList[firstIndex]
     val secondAircraft = aircraftList[secondIndex]
     val routeAircraft = aircraftList[routeAircraftIndex]
+    val routeOrigin = routeAirports[routeOriginIndex]
+    val routeDestination = routeAirports[routeDestinationIndex]
+    val routeMapMode = RouteMapMode.valueOf(routeMapModeName)
     val allAircraftOptions = remember {
         aircraftList.mapIndexed { index, aircraft -> index to aircraft }
     }
@@ -1378,23 +1607,15 @@ fun AircraftCompareApp() {
             manufacturerFilter == "Все" || aircraft.manufacturer == manufacturerFilter
         }
 
-    val searchedCity = remember(cityQuery) {
-        if (cityQuery.isBlank()) null
-        else worldCities.firstOrNull { it.name.contains(cityQuery, ignoreCase = true) }
+    val routeDistance = remember(routeOrigin, routeDestination) {
+        haversineKm(routeOrigin.point, routeDestination.point)
     }
-    val searchedDistance = remember(searchedCity) {
-        searchedCity?.let { haversineKm(homeAirport, it.point) }
-    }
-    val suitableAircraft = remember(searchedDistance) {
-        if (searchedDistance == null) {
-            emptyList()
-        } else {
-            aircraftList
-                .mapIndexed { index, aircraft -> index to aircraft }
-                .filter { (_, aircraft) -> searchedDistance <= aircraft.rangeKm }
-                .sortedBy { (_, aircraft) -> aircraft.rangeKm - searchedDistance }
-                .take(8)
-        }
+    val suitableAircraft = remember(routeDistance) {
+        aircraftList
+            .mapIndexed { index, aircraft -> index to aircraft }
+            .filter { (_, aircraft) -> routeDistance <= aircraft.rangeKm }
+            .sortedBy { (_, aircraft) -> aircraft.rangeKm - routeDistance }
+            .take(8)
     }
 
     val isCurrentFavorite = favorites.any { it.firstIndex == firstIndex && it.secondIndex == secondIndex }
@@ -1410,6 +1631,50 @@ fun AircraftCompareApp() {
             color = MaterialTheme.colorScheme.background
         ) {
             val detailIndex = detailAircraftIndex
+
+            if (airportSelectionTarget != null) {
+                val selectingOrigin = airportSelectionTarget == "origin"
+
+                AirportSelectionDialog(
+                    title = if (selectingOrigin) {
+                        "Выбери аэропорт вылета"
+                    } else {
+                        "Выбери аэропорт назначения"
+                    },
+                    selectedAirport = if (selectingOrigin) {
+                        routeOrigin
+                    } else {
+                        routeDestination
+                    },
+                    excludedAirport = if (selectingOrigin) {
+                        routeDestination
+                    } else {
+                        routeOrigin
+                    },
+                    onDismiss = { airportSelectionTarget = null },
+                    onSelected = { selectedAirport ->
+                        val selectedIndex = routeAirports.indexOf(selectedAirport)
+
+                        if (selectingOrigin) {
+                            routeOriginIndex = selectedIndex
+                            saveRouteAirport(
+                                storageContext,
+                                ROUTE_ORIGIN_PREFERENCE_KEY,
+                                selectedAirport
+                            )
+                        } else {
+                            routeDestinationIndex = selectedIndex
+                            saveRouteAirport(
+                                storageContext,
+                                ROUTE_DESTINATION_PREFERENCE_KEY,
+                                selectedAirport
+                            )
+                        }
+
+                        airportSelectionTarget = null
+                    }
+                )
+            }
 
             if (detailIndex != null) {
                 AircraftDetailScreen(
@@ -1601,34 +1866,72 @@ fun AircraftCompareApp() {
                             Spacer(modifier = Modifier.height(20.dp))
 
                             Text(
-                                text = "Проверка города",
+                                text = "Планировщик маршрута",
                                 style = MaterialTheme.typography.titleLarge
                             )
 
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Text(
-                                text = "Узнай, долетит ли ${routeAircraft.fullName} до нужного города",
+                                text = "Выбери два аэропорта или посмотри, куда сможет долететь самолёт",
                                 style = MaterialTheme.typography.bodySmall
                             )
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            CityRangeChecker(
-                                query = cityQuery,
-                                onQueryChange = { cityQuery = it },
-                                matchedCity = searchedCity,
-                                aircraft = routeAircraft,
-                                unitSystem = unitSystem
+                            RouteEndpointSelector(
+                                origin = routeOrigin,
+                                destination = routeDestination,
+                                onOriginClick = {
+                                    airportSelectionTarget = "origin"
+                                },
+                                onDestinationClick = {
+                                    airportSelectionTarget = "destination"
+                                },
+                                onSwap = {
+                                    val oldOriginIndex = routeOriginIndex
+                                    routeOriginIndex = routeDestinationIndex
+                                    routeDestinationIndex = oldOriginIndex
+
+                                    saveRouteAirport(
+                                        storageContext,
+                                        ROUTE_ORIGIN_PREFERENCE_KEY,
+                                        routeAirports[routeOriginIndex]
+                                    )
+                                    saveRouteAirport(
+                                        storageContext,
+                                        ROUTE_DESTINATION_PREFERENCE_KEY,
+                                        routeAirports[routeDestinationIndex]
+                                    )
+                                }
                             )
 
-                            if (searchedCity != null && searchedDistance != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            RouteMapModeSelector(
+                                selectedMode = routeMapMode,
+                                onSelected = { selectedMode ->
+                                    routeMapModeName = selectedMode.name
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            if (routeMapMode == RouteMapMode.ROUTE) {
+                                RouteResultCard(
+                                    aircraft = routeAircraft,
+                                    origin = routeOrigin,
+                                    destination = routeDestination,
+                                    distanceKm = routeDistance,
+                                    unitSystem = unitSystem
+                                )
+
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 SuitableAircraftRow(
                                     aircraftOptions = suitableAircraft,
                                     selectedIndex = routeAircraftIndex,
-                                    distanceKm = searchedDistance,
+                                    distanceKm = routeDistance,
                                     unitSystem = unitSystem,
                                     onSelected = { selectedIndex ->
                                         routeAircraftIndex = selectedIndex
@@ -1638,40 +1941,34 @@ fun AircraftCompareApp() {
                                         )
                                     }
                                 )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+                            } else {
+                                ReachableAirportsSummary(
+                                    aircraft = routeAircraft,
+                                    origin = routeOrigin,
+                                    unitSystem = unitSystem
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
                             }
 
-                            Spacer(modifier = Modifier.height(20.dp))
-
-                            Text(
-                                text = "Самые дальние маршруты",
-                                style = MaterialTheme.typography.titleLarge
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Text(
-                                text = "${routeAircraft.fullName}: дальность ${
-                                    formatDistance(
-                                        routeAircraft.rangeKm.toDouble(),
-                                        unitSystem
-                                    )
-                                } от $homeAirportName",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            AircraftMap(
+                            InteractiveRouteMap(
                                 aircraft = routeAircraft,
-                                searchedCity = searchedCity,
-                                unitSystem = unitSystem
+                                origin = routeOrigin,
+                                destination = routeDestination,
+                                unitSystem = unitSystem,
+                                mode = routeMapMode
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "Синим — дальние маршруты. Оранжевым — найденный город.",
+                                text = if (routeMapMode == RouteMapMode.ROUTE) {
+                                    "Зелёный маршрут — уверенный запас, жёлтый — почти предел, красный — дальности недостаточно."
+                                } else {
+                                    "На карте показаны аэропорты из базы, доступные в пределах справочной дальности самолёта."
+                                },
                                 style = MaterialTheme.typography.bodySmall
                             )
 
@@ -2303,6 +2600,451 @@ private fun RouteAircraftSelectorCard(
 }
 
 @Composable
+private fun AirportSelectionDialog(
+    title: String,
+    selectedAirport: RouteAirport,
+    excludedAirport: RouteAirport,
+    onDismiss: () -> Unit,
+    onSelected: (RouteAirport) -> Unit
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedRegion by rememberSaveable { mutableStateOf("Все") }
+    val regions = remember {
+        listOf("Все") + routeAirports.map { it.region }.distinct()
+    }
+    val filteredAirports = routeAirports.filter { airport ->
+        airport != excludedAirport &&
+                (selectedRegion == "Все" || airport.region == selectedRegion) &&
+                (
+                        query.isBlank() ||
+                                airport.city.contains(query, ignoreCase = true) ||
+                                airport.code.contains(query, ignoreCase = true) ||
+                                airport.airportName.contains(query, ignoreCase = true)
+                        )
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.88f),
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                TextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Город или код аэропорта") },
+                    placeholder = { Text("Например: Дубай или DXB") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    regions.forEach { region ->
+                        FilterChip(
+                            selected = selectedRegion == region,
+                            onClick = { selectedRegion = region },
+                            label = { Text(region) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (filteredAirports.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Аэропорт не найден",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(
+                            items = filteredAirports,
+                            key = { it.code }
+                        ) { airport ->
+                            val selected = airport == selectedAirport
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelected(airport) },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (selected) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.LocationOn,
+                                        contentDescription = null,
+                                        tint = if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = airport.displayName,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = "${airport.airportName} · ${airport.region}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text("Закрыть")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RouteEndpointSelector(
+    origin: RouteAirport,
+    destination: RouteAirport,
+    onOriginClick: () -> Unit,
+    onDestinationClick: () -> Unit,
+    onSwap: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            RouteEndpointButton(
+                label = "Откуда",
+                airport = origin,
+                onClick = onOriginClick
+            )
+
+            IconButton(
+                onClick = onSwap,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.SwapVert,
+                    contentDescription = "Поменять направление маршрута",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            RouteEndpointButton(
+                label = "Куда",
+                airport = destination,
+                onClick = onDestinationClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun RouteEndpointButton(
+    label: String,
+    airport: RouteAirport,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.LocationOn,
+            contentDescription = null
+        )
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Text(
+                text = airport.displayName,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = airport.airportName,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun RouteMapModeSelector(
+    selectedMode: RouteMapMode,
+    onSelected: (RouteMapMode) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        FilterChip(
+            selected = selectedMode == RouteMapMode.ROUTE,
+            onClick = { onSelected(RouteMapMode.ROUTE) },
+            modifier = Modifier.weight(1f),
+            label = { Text("Маршрут") },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Outlined.Map,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        )
+
+        FilterChip(
+            selected = selectedMode == RouteMapMode.REACHABLE,
+            onClick = { onSelected(RouteMapMode.REACHABLE) },
+            modifier = Modifier.weight(1f),
+            label = { Text("Куда долетит") },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Outlined.Explore,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        )
+    }
+}
+
+@Composable
+private fun RouteResultCard(
+    aircraft: Aircraft,
+    origin: RouteAirport,
+    destination: RouteAirport,
+    distanceKm: Double,
+    unitSystem: UnitSystem
+) {
+    val status = routeStatus(distanceKm, aircraft.rangeKm)
+    val statusColor = routeStatusColor(status)
+    val rangeDifference = aircraft.rangeKm - distanceKm
+    val reservePercent = rangeDifference / aircraft.rangeKm * 100.0
+    val flightTime = estimatedFlightMinutes(distanceKm, aircraft.cruiseSpeedKmh)
+    val routeClass = when {
+        distanceKm < 1500 -> "Короткий"
+        distanceKm < 4000 -> "Средний"
+        else -> "Дальний"
+    }
+    val statusText = when (status) {
+        RouteStatus.COMFORTABLE -> "Долетит с запасом"
+        RouteStatus.TIGHT -> "Почти на пределе"
+        RouteStatus.INSUFFICIENT -> "Дальности недостаточно"
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "${origin.code} → ${destination.code}",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = statusText,
+                color = statusColor,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RouteMetric(
+                    title = "Расстояние",
+                    value = formatDistance(distanceKm, unitSystem),
+                    modifier = Modifier.weight(1f)
+                )
+                RouteMetric(
+                    title = "Время",
+                    value = formatFlightTime(flightTime),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                RouteMetric(
+                    title = if (rangeDifference >= 0) "Запас" else "Не хватает",
+                    value = "${
+                        formatDistance(abs(rangeDifference), unitSystem)
+                    } · ${abs(reservePercent).roundToInt()}%",
+                    modifier = Modifier.weight(1f),
+                    valueColor = statusColor
+                )
+                RouteMetric(
+                    title = "Тип маршрута",
+                    value = routeClass,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Время приблизительное: учтены крейсерская скорость, набор высоты, снижение и наземные операции.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun RouteMetric(
+    title: String,
+    value: String,
+    modifier: Modifier,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = value,
+                color = valueColor,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReachableAirportsSummary(
+    aircraft: Aircraft,
+    origin: RouteAirport,
+    unitSystem: UnitSystem
+) {
+    val reachableAirports = remember(aircraft.rangeKm, origin.code) {
+        routeAirports
+            .filter { it != origin }
+            .map { it to haversineKm(origin.point, it.point) }
+            .filter { (_, distance) -> distance <= aircraft.rangeKm }
+            .sortedByDescending { (_, distance) -> distance }
+    }
+    val farthest = reachableAirports.firstOrNull()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Из ${origin.displayName} доступно аэропортов: ${reachableAirports.size}",
+                fontWeight = FontWeight.Bold
+            )
+
+            if (farthest != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Самая дальняя доступная точка в базе: ${
+                        farthest.first.displayName
+                    } · ${formatDistance(farthest.second, unitSystem)}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Расчёт использует справочную дальность без учёта загрузки, ветра и обязательного резерва топлива.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
 private fun SuitableAircraftRow(
     aircraftOptions: List<Pair<Int, Aircraft>>,
     selectedIndex: Int,
@@ -2874,86 +3616,6 @@ fun ValueCell(text: String, highlighted: Boolean, modifier: Modifier) {
     )
 }
 
-@Composable
-private fun CityRangeChecker(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    matchedCity: City?,
-    aircraft: Aircraft,
-    unitSystem: UnitSystem
-) {
-    val distance = matchedCity?.let { haversineKm(homeAirport, it.point) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            TextField(
-                value = query,
-                onValueChange = onQueryChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Введи город") },
-                placeholder = { Text("Например: Токио, Дубай, Мадрид") },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            if (query.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-
-                if (matchedCity == null) {
-                    Text(
-                        text = "Город не найден в базе (~130 крупных городов мира). Попробуй другое написание.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                } else if (distance != null) {
-                    val reachable = distance <= aircraft.rangeKm
-                    val color = if (reachable) Color(0xFF2E7D32) else Color(0xFFC62828)
-                    val statusText = if (reachable) "Долетит ✓" else "Не долетит без дозаправки ✕"
-                    val rangeDifference = aircraft.rangeKm - distance
-
-                    Text(
-                        text = statusText,
-                        color = color,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = "Расстояние: ${formatDistance(distance, unitSystem)}",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-
-                    Text(
-                        text = "Дальность самолёта: ${
-                            formatDistance(aircraft.rangeKm.toDouble(), unitSystem)
-                        }",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-
-                    Text(
-                        text = if (reachable) {
-                            "Запас дальности: ${
-                                formatDistance(rangeDifference, unitSystem)
-                            }"
-                        } else {
-                            "Не хватает: ${
-                                formatDistance(abs(rangeDifference), unitSystem)
-                            }"
-                        },
-                        color = color,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-    }
-}
-
 private val cartoTileSource = XYTileSource(
     "CartoDBVoyager",
     0, 19, 256, ".png",
@@ -2963,6 +3625,280 @@ private val cartoTileSource = XYTileSource(
         "https://c.basemaps.cartocdn.com/rastertiles/voyager/"
     )
 )
+
+private fun airplaneMarkerDrawable(context: Context): BitmapDrawable {
+    val density = context.resources.displayMetrics.density
+    val size = (42 * density).roundToInt()
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF1565C0.toInt()
+        textSize = 31 * density
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.DEFAULT_BOLD
+    }
+    val center = size / 2f
+    val baseline = center - (paint.ascent() + paint.descent()) / 2f
+    canvas.drawText("✈", center, baseline, paint)
+    return BitmapDrawable(context.resources, bitmap)
+}
+
+private fun airportDotDrawable(context: Context): BitmapDrawable {
+    val density = context.resources.displayMetrics.density
+    val size = (18 * density).roundToInt()
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF1565C0.toInt()
+        style = Paint.Style.FILL
+    }
+    val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2 * density
+    }
+    val center = size / 2f
+    val radius = center - 2 * density
+    canvas.drawCircle(center, center, radius, paint)
+    canvas.drawCircle(center, center, radius, borderPaint)
+    return BitmapDrawable(context.resources, bitmap)
+}
+
+@Composable
+private fun InteractiveRouteMap(
+    aircraft: Aircraft,
+    origin: RouteAirport,
+    destination: RouteAirport,
+    unitSystem: UnitSystem,
+    mode: RouteMapMode
+) {
+    val context = LocalContext.current
+    val routePoints = remember(origin.code, destination.code) {
+        greatCirclePoints(origin.point, destination.point, segments = 128)
+    }
+    val routeDistance = remember(origin.code, destination.code) {
+        haversineKm(origin.point, destination.point)
+    }
+    val status = routeStatus(routeDistance, aircraft.rangeKm)
+    var animationProgress by remember(origin.code, destination.code) {
+        mutableStateOf(0f)
+    }
+    var isAnimating by remember(origin.code, destination.code) {
+        mutableStateOf(false)
+    }
+
+    val mapView = remember {
+        MapView(context).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setTileSource(cartoTileSource)
+            setMultiTouchControls(true)
+            controller.setZoom(3.0)
+            controller.setCenter(origin.point)
+
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN,
+                    MotionEvent.ACTION_MOVE -> {
+                        parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+
+                    MotionEvent.ACTION_UP,
+                    MotionEvent.ACTION_CANCEL -> {
+                        parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    view.performClick()
+                }
+
+                false
+            }
+        }
+    }
+    val planeMarker = remember(mapView) {
+        Marker(mapView).apply {
+            icon = airplaneMarkerDrawable(context)
+            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            title = aircraft.fullName
+        }
+    }
+
+    DisposableEffect(mapView) {
+        onDispose { mapView.onDetach() }
+    }
+
+    LaunchedEffect(aircraft.fullName, origin.code, destination.code) {
+        animationProgress = 0f
+        isAnimating = false
+    }
+
+    LaunchedEffect(
+        aircraft.fullName,
+        aircraft.rangeKm,
+        origin.code,
+        destination.code,
+        unitSystem,
+        mode
+    ) {
+        mapView.overlays.clear()
+
+        val originMarker = Marker(mapView).apply {
+            position = origin.point
+            title = "Вылет · ${origin.displayName}"
+            snippet = origin.airportName
+        }
+        mapView.overlays.add(originMarker)
+
+        if (mode == RouteMapMode.ROUTE) {
+            val routeLine = Polyline(mapView).apply {
+                setPoints(routePoints)
+                outlinePaint.color = routeStatusMapColor(status)
+                outlinePaint.strokeWidth = 7f
+            }
+            mapView.overlays.add(routeLine)
+
+            val destinationMarker = Marker(mapView).apply {
+                position = destination.point
+                title = "Прибытие · ${destination.displayName}"
+                snippet = "${destination.airportName} · ${
+                    formatDistance(routeDistance, unitSystem)
+                }"
+            }
+            mapView.overlays.add(destinationMarker)
+
+            planeMarker.position = pointAlongRoute(routePoints, animationProgress)
+            planeMarker.title = aircraft.fullName
+            planeMarker.snippet = "Нажми «Запустить полёт»"
+            mapView.overlays.add(planeMarker)
+
+            val zoom = when {
+                routeDistance > 12000 -> 2.0
+                routeDistance > 7000 -> 2.6
+                routeDistance > 3500 -> 3.3
+                routeDistance > 1600 -> 4.1
+                routeDistance > 700 -> 5.0
+                else -> 6.0
+            }
+            mapView.controller.setZoom(zoom)
+            mapView.controller.setCenter(routePoints[routePoints.size / 2])
+        } else {
+            val reachableAirports = routeAirports
+                .filter { it != origin }
+                .map { airport ->
+                    airport to haversineKm(origin.point, airport.point)
+                }
+                .filter { (_, distance) -> distance <= aircraft.rangeKm }
+
+            reachableAirports.forEach { (airport, distance) ->
+                val marker = Marker(mapView).apply {
+                    position = airport.point
+                    icon = airportDotDrawable(context)
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    title = airport.displayName
+                    snippet = "${airport.airportName} · ${
+                        formatDistance(distance, unitSystem)
+                    }"
+                }
+                mapView.overlays.add(marker)
+            }
+
+            mapView.controller.setZoom(2.3)
+            mapView.controller.setCenter(origin.point)
+        }
+
+        mapView.invalidate()
+    }
+
+    LaunchedEffect(animationProgress, mode, routePoints) {
+        if (mode == RouteMapMode.ROUTE) {
+            planeMarker.position = pointAlongRoute(routePoints, animationProgress)
+            planeMarker.snippet = "Пройдено ${(animationProgress * 100).roundToInt()}%"
+            mapView.invalidate()
+        }
+    }
+
+    LaunchedEffect(isAnimating, origin.code, destination.code) {
+        if (isAnimating) {
+            val startProgress = animationProgress
+            val frames = 120
+
+            for (frame in 1..frames) {
+                val frameProgress = frame.toFloat() / frames
+                animationProgress = startProgress +
+                        (1f - startProgress) * frameProgress
+                delay(25)
+            }
+
+            isAnimating = false
+        }
+    }
+
+    Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(360.dp)
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            AndroidView(
+                factory = { mapView },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            if (mode == RouteMapMode.ROUTE) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    color = routeStatusColor(status).copy(alpha = 0.92f)
+                ) {
+                    Text(
+                        text = "${origin.code} → ${destination.code}",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+
+        if (mode == RouteMapMode.ROUTE) {
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Button(
+                onClick = {
+                    if (animationProgress >= 0.999f) {
+                        animationProgress = 0f
+                    }
+                    isAnimating = true
+                },
+                enabled = !isAnimating && status != RouteStatus.INSUFFICIENT,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = when {
+                        status == RouteStatus.INSUFFICIENT -> "Не долетит без посадки"
+                        isAnimating -> "Самолёт в пути…"
+                        animationProgress >= 0.999f -> "Повторить полёт"
+                        else -> "Запустить полёт"
+                    }
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun AircraftMap(

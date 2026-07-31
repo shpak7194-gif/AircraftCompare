@@ -14,6 +14,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.preference.PreferenceManager
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.XYTileSource
@@ -76,6 +79,9 @@ class MainActivity : ComponentActivity() {
 data class Aircraft(
     val manufacturer: String,
     val model: String,
+    val family: String,
+    val generation: String,
+    val productionPeriod: String,
     val seats: String,
     val rangeKm: Int,
     val lengthM: Double,
@@ -172,6 +178,9 @@ private val aircraftList = listOf(
     Aircraft(
         manufacturer = "Boeing",
         model = "737 MAX 8",
+        family = "Boeing 737 MAX",
+        generation = "Современное поколение",
+        productionPeriod = "с 2017 года",
         seats = "160–180, максимум 210",
         rangeKm = 6480,
         lengthM = 39.5,
@@ -191,6 +200,9 @@ private val aircraftList = listOf(
     Aircraft(
         manufacturer = "Boeing",
         model = "787-9 Dreamliner",
+        family = "Boeing 787 Dreamliner",
+        generation = "Современное поколение",
+        productionPeriod = "с 2014 года",
         seats = "250–325, 2 класса",
         rangeKm = 15370,
         lengthM = 62.8,
@@ -210,6 +222,9 @@ private val aircraftList = listOf(
     Aircraft(
         manufacturer = "Boeing",
         model = "777-9",
+        family = "Boeing 777X",
+        generation = "Новое поколение",
+        productionPeriod = "лётные испытания с 2020 года",
         seats = "375–450, 2 класса",
         rangeKm = 14820,
         lengthM = 76.7,
@@ -229,6 +244,9 @@ private val aircraftList = listOf(
     Aircraft(
         manufacturer = "Airbus",
         model = "A220-300",
+        family = "Airbus A220",
+        generation = "Современное поколение",
+        productionPeriod = "с 2016 года",
         seats = "120–150, максимум 160",
         rangeKm = 6300,
         lengthM = 38.7,
@@ -248,6 +266,9 @@ private val aircraftList = listOf(
     Aircraft(
         manufacturer = "Airbus",
         model = "A320neo",
+        family = "Airbus A320neo",
+        generation = "Современное поколение",
+        productionPeriod = "с 2016 года",
         seats = "150–180, максимум 194",
         rangeKm = 6300,
         lengthM = 37.57,
@@ -267,6 +288,9 @@ private val aircraftList = listOf(
     Aircraft(
         manufacturer = "Airbus",
         model = "A330-900neo",
+        family = "Airbus A330neo",
+        generation = "Современное поколение",
+        productionPeriod = "с 2017 года",
         seats = "287–303, максимум 465",
         rangeKm = 13600,
         lengthM = 63.69,
@@ -286,6 +310,9 @@ private val aircraftList = listOf(
     Aircraft(
         manufacturer = "Airbus",
         model = "A350-900",
+        family = "Airbus A350",
+        generation = "Современное поколение",
+        productionPeriod = "с 2014 года",
         seats = "332–352, максимум 440",
         rangeKm = 15750,
         lengthM = 66.8,
@@ -301,7 +328,727 @@ private val aircraftList = listOf(
         firstFlight = "14 июня 2013",
         interestingFact = "Около 70% конструкции A350 выполнено из современных материалов: примерно 53% приходится на композиты и 14% — на титан.",
         history = "A350 XWB создавался Airbus с чистого листа как новое дальнемагистральное семейство с широким применением композитов в фюзеляже и крыле. A350-900 впервые поднялся в воздух 14 июня 2013 года и вошёл в коммерческую эксплуатацию в начале 2015 года."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737-300",
+        family = "Boeing 737 Classic",
+        generation = "Классическое поколение",
+        productionPeriod = "1984–1999 годы",
+        seats = "128–149",
+        rangeKm = 4204,
+        lengthM = 33.4,
+        wingspanM = 28.88,
+        mtowKg = 62820,
+        engine = "2 × CFM56-3",
+        cruiseSpeedKmh = 796,
+        cruiseMach = 0.74,
+        heightM = 11.13,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 20105,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "24 февраля 1984",
+        interestingFact = "Чтобы крупный двигатель CFM56 поместился под низким крылом 737, его агрегаты перенесли в стороны. Поэтому гондола двигателя получила характерную приплюснутую снизу форму.",
+        history = "737-300 открыл поколение 737 Classic. По сравнению с ранними 737 он получил более экономичные двигатели CFM56, новое крыло и обновлённую кабину экипажа. После первого полёта в феврале 1984 года самолёт быстро стал популярным на коротких и средних маршрутах."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737-400",
+        family = "Boeing 737 Classic",
+        generation = "Классическое поколение",
+        productionPeriod = "1988–2000 годы",
+        seats = "146–168, максимум 188",
+        rangeKm = 3815,
+        lengthM = 36.45,
+        wingspanM = 28.88,
+        mtowKg = 68040,
+        engine = "2 × CFM56-3",
+        cruiseSpeedKmh = 796,
+        cruiseMach = 0.74,
+        heightM = 11.13,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 23170,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "19 февраля 1988",
+        interestingFact = "Из-за удлинённого фюзеляжа самолёт получил хвостовую опору, защищающую нижнюю часть фюзеляжа от касания полосы при взлёте.",
+        history = "737-400 создавался как увеличенная версия 737-300 для более загруженных маршрутов. Первый полёт состоялся в 1988 году, а уже осенью того же года модель начала коммерческие рейсы. Позднее часть самолётов переоборудовали в грузовой вариант."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737-500",
+        family = "Boeing 737 Classic",
+        generation = "Классическое поколение",
+        productionPeriod = "1990–1999 годы",
+        seats = "108–132",
+        rangeKm = 4444,
+        lengthM = 31.01,
+        wingspanM = 28.88,
+        mtowKg = 60550,
+        engine = "2 × CFM56-3",
+        cruiseSpeedKmh = 796,
+        cruiseMach = 0.74,
+        heightM = 11.07,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 20105,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "30 июня 1989",
+        interestingFact = "737-500 примерно соответствовал по вместимости старому 737-200, но был заметно тише и экономичнее благодаря двигателям CFM56.",
+        history = "737-500 стал самой короткой версией поколения Classic и прямой современной заменой 737-200. Он впервые поднялся в воздух летом 1989 года и хорошо подходил для маршрутов с небольшим пассажиропотоком и сложными аэропортами."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737-600",
+        family = "Boeing 737 Next Generation",
+        generation = "Предыдущее поколение",
+        productionPeriod = "1998–2006 годы",
+        seats = "108–130",
+        rangeKm = 5648,
+        lengthM = 31.24,
+        wingspanM = 34.32,
+        mtowKg = 65090,
+        engine = "2 × CFM56-7B",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 12.57,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 26020,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "22 января 1998",
+        interestingFact = "737-600 стал самой редкой пассажирской версией поколения Next Generation: было построено всего 69 самолётов.",
+        history = "737-600 был самым компактным представителем семейства 737 Next Generation. Он получил новое увеличенное крыло, современную авионику и двигатели CFM56-7B, но рынок вскоре сместился в сторону более вместительных моделей."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737-700",
+        family = "Boeing 737 Next Generation",
+        generation = "Предыдущее поколение",
+        productionPeriod = "1997–2019 годы",
+        seats = "125–145, максимум 149",
+        rangeKm = 5370,
+        lengthM = 33.6,
+        wingspanM = 35.8,
+        mtowKg = 70080,
+        engine = "2 × CFM56-7B",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 12.5,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 26020,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "9 февраля 1997",
+        interestingFact = "Именно конструкция 737-700 стала основой первого Boeing Business Jet с увеличенной дальностью и роскошным салоном.",
+        history = "737-700 первым вышел на испытания в семействе Next Generation. Он создавался как более эффективная замена 737-300 и получил новое крыло, цифровую кабину и увеличенную дальность. Первые коммерческие самолёты начала эксплуатировать Southwest Airlines."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737-800",
+        family = "Boeing 737 Next Generation",
+        generation = "Предыдущее поколение",
+        productionPeriod = "1998–2020 годы",
+        seats = "160–180, максимум 189",
+        rangeKm = 5190,
+        lengthM = 39.5,
+        wingspanM = 35.8,
+        mtowKg = 79010,
+        engine = "2 × CFM56-7B",
+        cruiseSpeedKmh = 842,
+        cruiseMach = 0.79,
+        heightM = 12.5,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 26020,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "31 июля 1997",
+        interestingFact = "Военно-морской патрульный самолёт Boeing P-8 Poseidon создан на основе конструкции 737-800ERX.",
+        history = "737-800 стал самой массовой версией семейства Next Generation и одним из самых распространённых пассажирских самолётов своего времени. Он впервые полетел в 1997 году и занял важное место во флотах обычных и бюджетных авиакомпаний."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737-900ER",
+        family = "Boeing 737 Next Generation",
+        generation = "Предыдущее поколение",
+        productionPeriod = "2007–2019 годы",
+        seats = "175–193, максимум 220",
+        rangeKm = 5925,
+        lengthM = 42.1,
+        wingspanM = 35.8,
+        mtowKg = 85139,
+        engine = "2 × CFM56-7B",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 12.5,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 29660,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "1 сентября 2006",
+        interestingFact = "Дополнительные аварийные выходы позволили увеличить максимальную вместимость 737-900ER до 220 пассажиров.",
+        history = "737-900ER стал крупнейшей и наиболее дальнобойной пассажирской версией поколения Next Generation. По сравнению с исходным 737-900 он получил дополнительные двери, увеличенную массу и возможность установки дополнительных топливных баков."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "737 MAX 9",
+        family = "Boeing 737 MAX",
+        generation = "Современное поколение",
+        productionPeriod = "с 2018 года",
+        seats = "175–195, максимум 220",
+        rangeKm = 6110,
+        lengthM = 42.1,
+        wingspanM = 35.9,
+        mtowKg = 88310,
+        engine = "2 × CFM LEAP-1B",
+        cruiseSpeedKmh = 839,
+        cruiseMach = 0.79,
+        heightM = 12.3,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 25817,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "13 апреля 2017",
+        interestingFact = "По длине 737 MAX 9 почти совпадает с 737-900ER, но использует новое крыло, двигатели LEAP-1B и фирменные раздвоенные законцовки.",
+        history = "737 MAX 9 стал удлинённой версией нового поколения 737. Первый полёт состоялся весной 2017 года, а коммерческая эксплуатация началась в 2018 году. Модель рассчитана на более загруженные маршруты, чем MAX 8."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "747-400",
+        family = "Boeing 747",
+        generation = "Классический широкофюзеляжный",
+        productionPeriod = "1988–2009 годы",
+        seats = "416, 3 класса; максимум 660",
+        rangeKm = 14200,
+        lengthM = 70.67,
+        wingspanM = 64.44,
+        mtowKg = 396890,
+        engine = "CF6-80C2, PW4000 или RB211",
+        cruiseSpeedKmh = 907,
+        cruiseMach = 0.85,
+        heightM = 19.41,
+        cabinWidthM = 6.13,
+        fuelCapacityLiters = 216840,
+        aircraftType = "Широкофюзеляжный, 4 двигателя",
+        firstFlight = "29 апреля 1988",
+        interestingFact = "747-400 получил стеклянную кабину и экипаж из двух пилотов вместо трёх, а его законцовки крыла стали одной из самых узнаваемых деталей самолёта.",
+        history = "747-400 стал самой массовой версией легендарного Jumbo Jet. Он объединил увеличенную дальность, новое крыло, цифровую авионику и обновлённые двигатели. С конца 1980-х модель выполняла множество важнейших межконтинентальных рейсов."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "747-8 Intercontinental",
+        family = "Boeing 747",
+        generation = "Последнее поколение 747",
+        productionPeriod = "2011–2022 годы",
+        seats = "410–467, максимум 605",
+        rangeKm = 14320,
+        lengthM = 76.25,
+        wingspanM = 68.45,
+        mtowKg = 447700,
+        engine = "4 × GEnx-2B67",
+        cruiseSpeedKmh = 917,
+        cruiseMach = 0.86,
+        heightM = 19.35,
+        cabinWidthM = 6.13,
+        fuelCapacityLiters = 238610,
+        aircraftType = "Широкофюзеляжный, 4 двигателя",
+        firstFlight = "20 марта 2011",
+        interestingFact = "В обозначении 747-8 цифра восемь подчёркивала технологическую связь с 787 Dreamliner, включая двигатели нового поколения и обновлённое крыло.",
+        history = "747-8 Intercontinental стал последней пассажирской модификацией Boeing 747. Самолёт получил удлинённый фюзеляж и верхнюю палубу, новое крыло и двигатели GEnx. Первым эксплуатантом пассажирской версии в 2012 году стала Lufthansa."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "757-200",
+        family = "Boeing 757",
+        generation = "Классическое поколение",
+        productionPeriod = "1982–2004 годы",
+        seats = "178–200, максимум 239",
+        rangeKm = 7222,
+        lengthM = 47.32,
+        wingspanM = 38.05,
+        mtowKg = 115680,
+        engine = "RB211 или PW2000",
+        cruiseSpeedKmh = 850,
+        cruiseMach = 0.80,
+        heightM = 13.56,
+        cabinWidthM = 3.54,
+        fuelCapacityLiters = 43490,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "19 февраля 1982",
+        interestingFact = "Мощные двигатели и эффективное крыло обеспечили 757 отличные взлётные характеристики, особенно в жарких и высокогорных аэропортах.",
+        history = "757-200 создавался как более экономичная замена Boeing 727 на маршрутах средней дальности. Он начал полёты в 1982 году и оказался достаточно дальнобойным, чтобы позднее выполнять регулярные трансатлантические рейсы."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "767-300ER",
+        family = "Boeing 767",
+        generation = "Классическое широкофюзеляжное",
+        productionPeriod = "1986–2014 годы",
+        seats = "218–269",
+        rangeKm = 11070,
+        lengthM = 54.94,
+        wingspanM = 47.57,
+        mtowKg = 186880,
+        engine = "CF6, PW4000 или RB211",
+        cruiseSpeedKmh = 850,
+        cruiseMach = 0.80,
+        heightM = 15.85,
+        cabinWidthM = 4.72,
+        fuelCapacityLiters = 91380,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "9 декабря 1986",
+        interestingFact = "Типичная схема кресел 2+3+2 означает, что в каждом ряду только одно среднее место — заметно меньше, чем у многих других широкофюзеляжных самолётов.",
+        history = "767-300ER стал дальнемагистральным развитием удлинённого 767-300. Благодаря увеличенному запасу топлива и правилам ETOPS двухдвигательный самолёт широко использовался на трансатлантических маршрутах."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "777-200ER",
+        family = "Boeing 777",
+        generation = "Предыдущее поколение",
+        productionPeriod = "1997–2013 годы",
+        seats = "301–375",
+        rangeKm = 13080,
+        lengthM = 63.7,
+        wingspanM = 60.9,
+        mtowKg = 297550,
+        engine = "GE90, PW4000 или Trent 800",
+        cruiseSpeedKmh = 892,
+        cruiseMach = 0.84,
+        heightM = 18.5,
+        cabinWidthM = 5.86,
+        fuelCapacityLiters = 171176,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "7 октября 1996",
+        interestingFact = "Семейство 777 стало первым пассажирским Boeing с полноценной цифровой электродистанционной системой управления fly-by-wire.",
+        history = "777-200ER первоначально назывался 777-200IGW — версией с увеличенной массой. Дополнительный запас топлива превратил его в один из основных дальнемагистральных самолётов конца 1990-х и 2000-х годов."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "777-300ER",
+        family = "Boeing 777",
+        generation = "Предыдущее поколение",
+        productionPeriod = "2004–2021 годы",
+        seats = "350–425",
+        rangeKm = 13890,
+        lengthM = 73.9,
+        wingspanM = 64.8,
+        mtowKg = 351530,
+        engine = "2 × GE90-115B",
+        cruiseSpeedKmh = 892,
+        cruiseMach = 0.84,
+        heightM = 18.5,
+        cabinWidthM = 5.86,
+        fuelCapacityLiters = 181283,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "24 февраля 2003",
+        interestingFact = "GE90-115B, разработанный для этой модели, при появлении был самым мощным серийным авиационным двигателем в мире.",
+        history = "777-300ER объединил длинный фюзеляж 777-300 с увеличенной дальностью, усиленным шасси и новыми законцовками крыла. После начала эксплуатации в 2004 году он стал одним из главных самолётов дальнемагистральных авиакомпаний."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "787-8 Dreamliner",
+        family = "Boeing 787 Dreamliner",
+        generation = "Современное поколение",
+        productionPeriod = "с 2011 года",
+        seats = "200–275, 2 класса",
+        rangeKm = 14820,
+        lengthM = 56.7,
+        wingspanM = 60.1,
+        mtowKg = 227930,
+        engine = "GEnx-1B или Trent 1000",
+        cruiseSpeedKmh = 903,
+        cruiseMach = 0.85,
+        heightM = 16.9,
+        cabinWidthM = 5.49,
+        fuelCapacityLiters = 126206,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "15 декабря 2009",
+        interestingFact = "Около половины массы конструкции 787 приходится на композитные материалы, что стало большим шагом для серийной гражданской авиации.",
+        history = "787-8 стал первой версией программы Dreamliner и первым новым пассажирским семейством Boeing за многие годы. После длительной разработки он впервые полетел в 2009 году, а в 2011 году начал коммерческие рейсы с All Nippon Airways."
+    ),
+    Aircraft(
+        manufacturer = "Boeing",
+        model = "787-10 Dreamliner",
+        family = "Boeing 787 Dreamliner",
+        generation = "Современное поколение",
+        productionPeriod = "с 2018 года",
+        seats = "300–375, 2 класса",
+        rangeKm = 13890,
+        lengthM = 68.3,
+        wingspanM = 60.1,
+        mtowKg = 260360,
+        engine = "GEnx-1B или Trent 1000",
+        cruiseSpeedKmh = 903,
+        cruiseMach = 0.85,
+        heightM = 17.0,
+        cabinWidthM = 5.49,
+        fuelCapacityLiters = 126372,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "31 марта 2017",
+        interestingFact = "787-10 заметно длиннее 787-9, но сохраняет тот же размах крыла и близкий запас топлива, поэтому ориентирован на вместимость, а не на рекордную дальность.",
+        history = "787-10 стал самой длинной и вместительной версией Dreamliner. Он впервые поднялся в воздух в 2017 году, а первым оператором в 2018 году стала Singapore Airlines. Модель особенно эффективна на маршрутах с большим пассажиропотоком."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A220-100",
+        family = "Airbus A220",
+        generation = "Современное поколение",
+        productionPeriod = "с 2016 года",
+        seats = "100–120, максимум 135",
+        rangeKm = 6700,
+        lengthM = 35.0,
+        wingspanM = 35.1,
+        mtowKg = 63700,
+        engine = "2 × PW1500G",
+        cruiseSpeedKmh = 829,
+        cruiseMach = 0.78,
+        heightM = 11.5,
+        cabinWidthM = 3.28,
+        fuelCapacityLiters = 21805,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "16 сентября 2013",
+        interestingFact = "A220-100 и A220-300 имеют около 99% общих компонентов, поэтому авиакомпаниям проще совместно эксплуатировать обе версии.",
+        history = "A220-100 первоначально назывался Bombardier CS100 и стал первой летающей версией программы C Series. Он впервые поднялся в воздух в 2013 году, а коммерческую эксплуатацию начал в 2016 году со Swiss. Позднее самолёт получил обозначение Airbus A220-100."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A318",
+        family = "Airbus A320ceo",
+        generation = "Классическое поколение",
+        productionPeriod = "2003–2013 годы",
+        seats = "107–120, максимум 132",
+        rangeKm = 5750,
+        lengthM = 31.44,
+        wingspanM = 34.1,
+        mtowKg = 68000,
+        engine = "CFM56-5B или PW6000",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 12.56,
+        cabinWidthM = 3.70,
+        fuelCapacityLiters = 24210,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "15 января 2002",
+        interestingFact = "Некоторые A318 получили допуск к заходам с увеличенной глиссадой в London City Airport; British Airways использовала их даже на маршруте через Атлантику.",
+        history = "A318 стал самым маленьким членом семейства A320 и получил неофициальное прозвище Baby Bus. Самолёт создавался для линий с небольшим спросом и впервые полетел в 2002 году, но рынок вскоре предпочёл более вместительные модели."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A319",
+        family = "Airbus A320ceo",
+        generation = "Классическое поколение",
+        productionPeriod = "1996–2021 годы",
+        seats = "120–150, максимум 156",
+        rangeKm = 6950,
+        lengthM = 33.84,
+        wingspanM = 35.8,
+        mtowKg = 75500,
+        engine = "CFM56-5B или IAE V2500",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 11.76,
+        cabinWidthM = 3.70,
+        fuelCapacityLiters = 24210,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "25 августа 1995",
+        interestingFact = "На базе A319 создан ACJ319 — корпоративный самолёт, способный получить дополнительные топливные баки и салон с отдельными комнатами.",
+        history = "A319 появился как укороченная версия A320 для менее загруженных маршрутов. Он сохранил общее крыло, кабину и типовую подготовку пилотов семейства, впервые полетел в 1995 году и начал коммерческую службу в 1996 году."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A320-200",
+        family = "Airbus A320ceo",
+        generation = "Классическое поколение",
+        productionPeriod = "1988–2021 годы",
+        seats = "140–170, максимум 180",
+        rangeKm = 6150,
+        lengthM = 37.57,
+        wingspanM = 34.1,
+        mtowKg = 78000,
+        engine = "CFM56-5B или IAE V2500",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 11.76,
+        cabinWidthM = 3.70,
+        fuelCapacityLiters = 24210,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "22 февраля 1987",
+        interestingFact = "A320 стал первым массовым пассажирским самолётом с цифровой системой fly-by-wire и боковыми ручками управления вместо традиционных штурвалов.",
+        history = "A320 положил начало самому успешному семейству Airbus. Программа была запущена в 1984 году, первый полёт состоялся в 1987 году, а Air France начала регулярную эксплуатацию в 1988 году. Версию с исходными двигателями позднее стали называть A320ceo."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A321-200",
+        family = "Airbus A320ceo",
+        generation = "Классическое поколение",
+        productionPeriod = "1994–2021 годы",
+        seats = "185–220",
+        rangeKm = 5950,
+        lengthM = 44.51,
+        wingspanM = 34.1,
+        mtowKg = 93500,
+        engine = "CFM56-5B или IAE V2500",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 11.76,
+        cabinWidthM = 3.70,
+        fuelCapacityLiters = 30030,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "11 марта 1993",
+        interestingFact = "A321 стал первым пассажирским Airbus, который собирали на новой линии окончательной сборки в Гамбурге.",
+        history = "A321 был первым удлинённым вариантом A320 и предназначался для маршрутов с большим пассажиропотоком. Он получил усиленное шасси, изменённые закрылки и более мощные двигатели, сохранив общую кабину пилотов семейства."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A319neo",
+        family = "Airbus A320neo",
+        generation = "Современное поколение",
+        productionPeriod = "программа с 2017 года",
+        seats = "120–150, максимум 160",
+        rangeKm = 6850,
+        lengthM = 33.84,
+        wingspanM = 35.8,
+        mtowKg = 75500,
+        engine = "LEAP-1A или PW1100G",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 11.76,
+        cabinWidthM = 3.70,
+        fuelCapacityLiters = 26730,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "31 марта 2017",
+        interestingFact = "A319neo сохраняет около 99% эксплуатационной общности с A320neo и A321neo, включая единую подготовку пилотов.",
+        history = "A319neo перенёс новые двигатели и аэродинамические улучшения программы neo на укороченный A319. Первый испытательный самолёт поднялся в воздух в 2017 году. Наибольший интерес к этой платформе проявил рынок корпоративных ACJ319neo."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A321neo",
+        family = "Airbus A320neo",
+        generation = "Современное поколение",
+        productionPeriod = "с 2017 года",
+        seats = "180–220, максимум 244",
+        rangeKm = 7400,
+        lengthM = 44.51,
+        wingspanM = 35.8,
+        mtowKg = 97000,
+        engine = "LEAP-1A или PW1100G",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 11.76,
+        cabinWidthM = 3.70,
+        fuelCapacityLiters = 32940,
+        aircraftType = "Узкофюзеляжный",
+        firstFlight = "9 февраля 2016",
+        interestingFact = "Новая компоновка дверей Cabin Flex позволяет разместить в одноклассном салоне A321neo до 244 пассажиров.",
+        history = "A321neo стал крупнейшим представителем базового семейства A320neo. Новые двигатели и законцовки Sharklet увеличили эффективность и дальность, а первый коммерческий самолёт был передан в 2017 году."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A321XLR",
+        family = "Airbus A320neo",
+        generation = "Сверхдальняя версия",
+        productionPeriod = "с 2024 года",
+        seats = "180–220, максимум 244",
+        rangeKm = 8700,
+        lengthM = 44.51,
+        wingspanM = 35.8,
+        mtowKg = 101500,
+        engine = "LEAP-1A или PW1100G",
+        cruiseSpeedKmh = 828,
+        cruiseMach = 0.78,
+        heightM = 11.76,
+        cabinWidthM = 3.70,
+        fuelCapacityLiters = 39630,
+        aircraftType = "Узкофюзеляжный дальнемагистральный",
+        firstFlight = "15 июня 2022",
+        interestingFact = "Встроенный задний центральный бак вмещает около 12 900 литров топлива и помогает A321XLR выполнять полёты продолжительностью до 11 часов.",
+        history = "A321XLR был запущен как версия A321neo для дальних малозагруженных маршрутов. Первый полёт состоялся в 2022 году, а в 2024 году самолёт начал коммерческую эксплуатацию, приблизив возможности узкофюзеляжной машины к широкофюзеляжным."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A330-200",
+        family = "Airbus A330",
+        generation = "Классическое широкофюзеляжное",
+        productionPeriod = "1998–2019 годы",
+        seats = "220–260, максимум 406",
+        rangeKm = 15094,
+        lengthM = 58.82,
+        wingspanM = 60.3,
+        mtowKg = 251000,
+        engine = "CF6, PW4000 или Trent 700",
+        cruiseSpeedKmh = 871,
+        cruiseMach = 0.82,
+        heightM = 17.39,
+        cabinWidthM = 5.26,
+        fuelCapacityLiters = 139090,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "13 августа 1997",
+        interestingFact = "Короткий фюзеляж и большой запас топлива сделали A330-200 одним из самых дальнобойных вариантов исходного семейства A330.",
+        history = "A330-200 создавался как укороченная версия A330-300 с увеличенной дальностью и как замена A300/A310. Он впервые полетел в 1997 году и широко использовался как на межконтинентальных пассажирских рейсах, так и в правительственных и военных вариантах."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A330-300",
+        family = "Airbus A330",
+        generation = "Классическое широкофюзеляжное",
+        productionPeriod = "1994–2020 годы",
+        seats = "250–290, максимум 440",
+        rangeKm = 11750,
+        lengthM = 63.66,
+        wingspanM = 60.3,
+        mtowKg = 242000,
+        engine = "CF6, PW4000 или Trent 700",
+        cruiseSpeedKmh = 871,
+        cruiseMach = 0.82,
+        heightM = 16.79,
+        cabinWidthM = 5.26,
+        fuelCapacityLiters = 97530,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "2 ноября 1992",
+        interestingFact = "A330-300 и четырёхдвигательный A340-300 разрабатывались параллельно и имеют очень похожие фюзеляж, крыло и кабину экипажа.",
+        history = "A330-300 стал первой и самой длинной версией исходного A330. Он впервые поднялся в воздух в 1992 году и начал службу в 1994 году. По мере расширения правил ETOPS двухдвигательный A330 получил возможность выполнять всё больше дальних океанских маршрутов."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A340-300",
+        family = "Airbus A340",
+        generation = "Классическое широкофюзеляжное",
+        productionPeriod = "1993–2008 годы",
+        seats = "250–290, максимум 440",
+        rangeKm = 13500,
+        lengthM = 63.69,
+        wingspanM = 60.3,
+        mtowKg = 275000,
+        engine = "4 × CFM56-5C",
+        cruiseSpeedKmh = 871,
+        cruiseMach = 0.82,
+        heightM = 16.91,
+        cabinWidthM = 5.28,
+        fuelCapacityLiters = 147850,
+        aircraftType = "Широкофюзеляжный, 4 двигателя",
+        firstFlight = "25 октября 1991",
+        interestingFact = "Пилоты шутили о спокойном разгоне A340-300, называя его самолётом, который взлетает благодаря кривизне Земли, хотя модель отличалась большой дальностью и надёжностью.",
+        history = "A340-300 разрабатывался одновременно с двухдвигательным A330, но получил четыре двигателя для дальних маршрутов, где ранние ограничения ETOPS мешали двухдвигательным самолётам. В 1993 году модель начала коммерческие рейсы с Lufthansa и Air France."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A340-600",
+        family = "Airbus A340",
+        generation = "Классическое широкофюзеляжное",
+        productionPeriod = "2002–2010 годы",
+        seats = "320–370, максимум 475",
+        rangeKm = 14450,
+        lengthM = 75.36,
+        wingspanM = 63.45,
+        mtowKg = 380000,
+        engine = "4 × Trent 500",
+        cruiseSpeedKmh = 881,
+        cruiseMach = 0.83,
+        heightM = 17.22,
+        cabinWidthM = 5.28,
+        fuelCapacityLiters = 204500,
+        aircraftType = "Широкофюзеляжный, 4 двигателя",
+        firstFlight = "23 апреля 2001",
+        interestingFact = "До появления Boeing 747-8 A340-600 был самым длинным серийным пассажирским самолётом в мире.",
+        history = "A340-600 стал глубокой модернизацией семейства A340 и предназначался для замены ранних Boeing 747 на дальних маршрутах. Он получил удлинённый фюзеляж, новое крыло, двигатели Trent 500 и дополнительную центральную стойку шасси."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A350-1000",
+        family = "Airbus A350",
+        generation = "Современное поколение",
+        productionPeriod = "с 2018 года",
+        seats = "350–410, максимум 480",
+        rangeKm = 16100,
+        lengthM = 73.79,
+        wingspanM = 64.75,
+        mtowKg = 322000,
+        engine = "2 × Trent XWB-97",
+        cruiseSpeedKmh = 903,
+        cruiseMach = 0.85,
+        heightM = 17.08,
+        cabinWidthM = 5.71,
+        fuelCapacityLiters = 164000,
+        aircraftType = "Широкофюзеляжный",
+        firstFlight = "24 ноября 2016",
+        interestingFact = "В отличие от A350-900, основная стойка шасси A350-1000 имеет по шесть колёс с каждой стороны, чтобы распределить увеличенную массу.",
+        history = "A350-1000 стал удлинённой и более мощной версией семейства A350 XWB. Первый полёт состоялся в 2016 году, а Qatar Airways начала коммерческую эксплуатацию в 2018 году. Для самолёта создали усиленную версию двигателя Trent XWB-97."
+    ),
+    Aircraft(
+        manufacturer = "Airbus",
+        model = "A380-800",
+        family = "Airbus A380",
+        generation = "Флагманский двухпалубный",
+        productionPeriod = "2007–2021 годы",
+        seats = "555, типично; максимум 853",
+        rangeKm = 14800,
+        lengthM = 72.72,
+        wingspanM = 79.75,
+        mtowKg = 575000,
+        engine = "4 × Trent 900 или GP7200",
+        cruiseSpeedKmh = 903,
+        cruiseMach = 0.85,
+        heightM = 24.09,
+        cabinWidthM = 6.50,
+        fuelCapacityLiters = 320000,
+        aircraftType = "Широкофюзеляжный, 2 палубы",
+        firstFlight = "27 апреля 2005",
+        interestingFact = "A380 — единственный серийный пассажирский самолёт с двумя полноценными палубами по всей длине фюзеляжа.",
+        history = "Программа A380 была запущена Airbus в 2000 году как европейский ответ Boeing 747. Первый полёт состоялся в 2005 году, а Singapore Airlines начала эксплуатацию в 2007 году. Производство завершилось в 2021 году после выпуска 251 самолёта."
     )
+)
+
+private val aircraftFamilyOrder = listOf(
+    "Boeing 737 Classic",
+    "Boeing 737 Next Generation",
+    "Boeing 737 MAX",
+    "Boeing 747",
+    "Boeing 757",
+    "Boeing 767",
+    "Boeing 777",
+    "Boeing 777X",
+    "Boeing 787 Dreamliner",
+    "Airbus A220",
+    "Airbus A320ceo",
+    "Airbus A320neo",
+    "Airbus A330",
+    "Airbus A330neo",
+    "Airbus A340",
+    "Airbus A350",
+    "Airbus A380"
+)
+
+private val aircraftModelOrder = listOf(
+    "737-300",
+    "737-400",
+    "737-500",
+    "737-600",
+    "737-700",
+    "737-800",
+    "737-900ER",
+    "737 MAX 8",
+    "737 MAX 9",
+    "747-400",
+    "747-8 Intercontinental",
+    "757-200",
+    "767-300ER",
+    "777-200ER",
+    "777-300ER",
+    "777-9",
+    "787-8 Dreamliner",
+    "787-9 Dreamliner",
+    "787-10 Dreamliner",
+    "A220-100",
+    "A220-300",
+    "A318",
+    "A319",
+    "A320-200",
+    "A321-200",
+    "A319neo",
+    "A320neo",
+    "A321neo",
+    "A321XLR",
+    "A330-200",
+    "A330-300",
+    "A330-900neo",
+    "A340-300",
+    "A340-600",
+    "A350-900",
+    "A350-1000",
+    "A380-800"
 )
 
 // Условный хаб вылета для демонстрации маршрутов — Москва (SVO)
@@ -646,6 +1393,7 @@ fun AircraftCompareApp() {
                 .mapIndexed { index, aircraft -> index to aircraft }
                 .filter { (_, aircraft) -> searchedDistance <= aircraft.rangeKm }
                 .sortedBy { (_, aircraft) -> aircraft.rangeKm - searchedDistance }
+                .take(8)
         }
     }
 
@@ -976,6 +1724,9 @@ private fun buildAircraftShareText(
 ): String {
     return buildString {
         appendLine(aircraft.fullName)
+        appendLine("Семейство: ${aircraft.family}")
+        appendLine("Поколение: ${aircraft.generation}")
+        appendLine("Период выпуска: ${aircraft.productionPeriod}")
         appendLine("Вместимость: ${aircraft.seats}")
         appendLine(
             "Дальность: ${formatDistance(aircraft.rangeKm.toDouble(), unitSystem)}"
@@ -1102,6 +1853,24 @@ private fun AircraftDetailScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         AircraftDetailCard(title = "Основные характеристики") {
+            AircraftDetailRow(
+                icon = Icons.Outlined.Business,
+                title = "Семейство",
+                value = aircraft.family
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.CalendarMonth,
+                title = "Поколение",
+                value = aircraft.generation
+            )
+            HorizontalDivider()
+            AircraftDetailRow(
+                icon = Icons.Outlined.CalendarMonth,
+                title = "Период выпуска",
+                value = aircraft.productionPeriod
+            )
+            HorizontalDivider()
             AircraftDetailRow(
                 icon = Icons.Outlined.Flight,
                 title = "Тип",
@@ -1380,7 +2149,10 @@ fun Header(darkTheme: Boolean, onThemeChange: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-            Text(text = "Сравнение самолётов", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = "Сравнение ${aircraftList.size} моделей Boeing и Airbus",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
 
         FilledIconButton(onClick = onThemeChange) {
@@ -1688,6 +2460,23 @@ fun AircraftSelector(
     onSelected: (Int) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val groupedOptions = remember(options) {
+        options
+            .groupBy { (_, aircraft) -> aircraft.family }
+            .map { (family, familyOptions) ->
+                family to familyOptions.sortedBy { (_, aircraft) ->
+                    aircraftModelOrder.indexOf(aircraft.model).let { index ->
+                        if (index >= 0) index else Int.MAX_VALUE
+                    }
+                }
+            }
+            .toList()
+            .sortedBy { (family, _) ->
+                aircraftFamilyOrder.indexOf(family).let { index ->
+                    if (index >= 0) index else Int.MAX_VALUE
+                }
+            }
+    }
 
     Column {
         Text(text = title, style = MaterialTheme.typography.labelLarge)
@@ -1701,22 +2490,128 @@ fun AircraftSelector(
         ) {
             ManufacturerBadge(selected.manufacturer)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = selected.fullName, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = selected.model,
+                    textAlign = TextAlign.Start,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = selected.family,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             Text("▼")
         }
 
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                val originalIndex = option.first
-                val aircraft = option.second
+        if (expanded) {
+            Dialog(onDismissRequest = { expanded = false }) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 680.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Выберите самолёт",
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                                Text(
+                                    text = "Модели сгруппированы по семействам",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
 
-                DropdownMenuItem(
-                    text = { Text(aircraft.fullName) },
-                    onClick = {
-                        onSelected(originalIndex)
-                        expanded = false
+                            TextButton(onClick = { expanded = false }) {
+                                Text("Закрыть")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (groupedOptions.isEmpty()) {
+                            Text(
+                                text = "Нет моделей для выбранного производителя",
+                                modifier = Modifier.padding(vertical = 24.dp),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        } else {
+                            LazyColumn(modifier = Modifier.weight(1f)) {
+                                groupedOptions.forEach { (family, familyOptions) ->
+                                    item(key = "header_$family") {
+                                        Text(
+                                            text = family,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(
+                                                    MaterialTheme.colorScheme.surfaceVariant,
+                                                    RoundedCornerShape(8.dp)
+                                                )
+                                                .padding(
+                                                    horizontal = 12.dp,
+                                                    vertical = 8.dp
+                                                ),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    items(
+                                        items = familyOptions,
+                                        key = { (index, _) -> index }
+                                    ) { (originalIndex, aircraft) ->
+                                        TextButton(
+                                            onClick = {
+                                                onSelected(originalIndex)
+                                                expanded = false
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentPadding = PaddingValues(
+                                                horizontal = 12.dp,
+                                                vertical = 8.dp
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                horizontalAlignment = Alignment.Start
+                                            ) {
+                                                Text(
+                                                    text = aircraft.model,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                Text(
+                                                    text = "${aircraft.generation} · ${aircraft.aircraftType}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    textAlign = TextAlign.Start
+                                                )
+                                            }
+
+                                            if (aircraft.fullName == selected.fullName) {
+                                                Text(
+                                                    text = "✓",
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+
+                                        HorizontalDivider()
+                                    }
+                                }
+                            }
+                        }
                     }
-                )
+                }
             }
         }
     }

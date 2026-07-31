@@ -27,6 +27,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -2884,6 +2885,9 @@ private fun UnitSystemSelector(
     selectedUnitSystem: UnitSystem,
     onUnitSystemSelected: (UnitSystem) -> Unit
 ) {
+    val unitSystems = UnitSystem.entries
+    val selectedIndex = unitSystems.indexOf(selectedUnitSystem).coerceAtLeast(0)
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -2900,56 +2904,17 @@ private fun UnitSystemSelector(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            Row(
+            SlidingSegmentedControl(
+                labels = listOf("Метрические", "Авиационные"),
+                subtitles = listOf("км/ч · км · м · кг", "kt · NM · ft · lb"),
+                selectedIndex = selectedIndex,
+                onSelectedIndex = { index ->
+                    onUnitSystemSelected(unitSystems[index])
+                },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                UnitSystem.entries.forEach { unitSystem ->
-                    val selected = unitSystem == selectedUnitSystem
-                    val title = if (unitSystem == UnitSystem.METRIC) {
-                        "Метрические"
-                    } else {
-                        "Авиационные"
-                    }
-                    val units = if (unitSystem == UnitSystem.METRIC) {
-                        "км/ч · км · м · кг"
-                    } else {
-                        "kt · NM · ft · lb"
-                    }
-
-                    Surface(
-                        onClick = { onUnitSystemSelected(unitSystem) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            Color.Transparent
-                        }
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = title,
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp
-                            )
-                            Text(
-                                text = units,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-                }
-            }
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
         }
     }
 }
@@ -2960,13 +2925,23 @@ private fun SlidingSegmentedControl(
     selectedIndex: Int,
     onSelectedIndex: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    icons: List<ImageVector?> = emptyList()
+    icons: List<ImageVector?> = emptyList(),
+    subtitles: List<String> = emptyList(),
+    selectedContainerColor: Color? = null,
+    selectedContentColor: Color? = null
 ) {
     if (labels.isEmpty()) return
 
     val density = LocalDensity.current
     val hapticFeedback = LocalHapticFeedback.current
     val safeSelectedIndex = selectedIndex.coerceIn(labels.indices)
+    val activeContainerColor = selectedContainerColor
+        ?: MaterialTheme.colorScheme.surface
+    val activeContentColor = selectedContentColor
+        ?: MaterialTheme.colorScheme.onSurface
+    val hasSubtitles = labels.indices.any { index ->
+        !subtitles.getOrNull(index).isNullOrBlank()
+    }
     var isDragging by remember { mutableStateOf(false) }
     var dragOffsetPx by remember { mutableFloatStateOf(0f) }
 
@@ -2978,7 +2953,7 @@ private fun SlidingSegmentedControl(
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp)
+                .height(if (hasSubtitles) 58.dp else 50.dp)
                 .padding(4.dp)
         ) {
             val segmentWidth = maxWidth / labels.size.toFloat()
@@ -3013,7 +2988,7 @@ private fun SlidingSegmentedControl(
                     .width(segmentWidth)
                     .fillMaxHeight(),
                 shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
+                color = activeContainerColor,
                 shadowElevation = 1.dp
             ) {}
 
@@ -3062,11 +3037,19 @@ private fun SlidingSegmentedControl(
                     }
             ) {
                 labels.forEachIndexed { index, label ->
+                    val interactionSource = remember(index) {
+                        MutableInteractionSource()
+                    }
+
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clickable {
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
                                 if (index != safeSelectedIndex) {
                                     hapticFeedback.performHapticFeedback(
                                         HapticFeedbackType.TextHandleMove
@@ -3096,21 +3079,38 @@ private fun SlidingSegmentedControl(
                                 Spacer(modifier = Modifier.width(7.dp))
                             }
 
-                            Text(
-                                text = label,
-                                color = if (index == visualSelectedIndex) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                fontWeight = if (index == visualSelectedIndex) {
-                                    FontWeight.SemiBold
-                                } else {
-                                    FontWeight.Normal
-                                },
-                                maxLines = 1,
-                                fontSize = 13.sp
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = label,
+                                    color = if (index == visualSelectedIndex) {
+                                        activeContentColor
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    fontWeight = if (index == visualSelectedIndex) {
+                                        FontWeight.SemiBold
+                                    } else {
+                                        FontWeight.Normal
+                                    },
+                                    maxLines = 1,
+                                    fontSize = 13.sp
+                                )
+
+                                subtitles.getOrNull(index)
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?.let { subtitle ->
+                                        Text(
+                                            text = subtitle,
+                                            color = if (index == visualSelectedIndex) {
+                                                activeContentColor.copy(alpha = 0.72f)
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            maxLines = 1,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                            }
                         }
                     }
                 }

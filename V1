@@ -7,18 +7,25 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,14 +40,19 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AirlineSeatReclineNormal
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Height
 import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.LocalGasStation
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Speed
@@ -57,11 +69,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -73,6 +92,7 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.*
 
 class MainActivity : ComponentActivity() {
@@ -1594,6 +1614,8 @@ fun AircraftCompareApp() {
     val context = LocalContext.current
     val storageContext = context.applicationContext
     val mainScrollState = rememberScrollState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     var firstIndex by rememberSaveable { mutableStateOf(0) }
     var secondIndex by rememberSaveable { mutableStateOf(4) }
@@ -1680,7 +1702,11 @@ fun AircraftCompareApp() {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            val detailIndex = detailAircraftIndex
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                val detailIndex = detailAircraftIndex
 
             if (airportSelectionTarget != null) {
                 val selectingOrigin = airportSelectionTarget == "origin"
@@ -1751,6 +1777,7 @@ fun AircraftCompareApp() {
             } else {
                 Column(
                     modifier = Modifier
+                        .widthIn(max = 900.dp)
                         .fillMaxSize()
                         .systemBarsPadding()
                         .verticalScroll(mainScrollState)
@@ -1822,18 +1849,38 @@ fun AircraftCompareApp() {
                             modifier = Modifier.weight(1f)
                         )
 
-                        IconButton(
+                        FilledTonalIconButton(
                             onClick = {
+                                val message: String
                                 if (isCurrentFavorite) {
                                     favorites.removeAll {
                                         it.firstIndex == firstIndex &&
                                                 it.secondIndex == secondIndex
                                     }
+                                    message = "Сравнение удалено из избранного"
                                 } else {
                                     favorites.add(FavoritePair(firstIndex, secondIndex))
+                                    message = "Сравнение сохранено в избранное"
                                 }
                                 saveFavoritePairs(storageContext, favorites)
-                            }
+
+                                coroutineScope.launch {
+                                    snackbarHostState.currentSnackbarData?.dismiss()
+                                    snackbarHostState.showSnackbar(message)
+                                }
+                            },
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = if (isCurrentFavorite) {
+                                    MaterialTheme.colorScheme.tertiaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                                contentColor = if (isCurrentFavorite) {
+                                    MaterialTheme.colorScheme.onTertiaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
                         ) {
                             Icon(
                                 imageVector = if (isCurrentFavorite) {
@@ -1841,16 +1888,17 @@ fun AircraftCompareApp() {
                                 } else {
                                     Icons.Outlined.Star
                                 },
-                                contentDescription = "В избранное",
-                                tint = if (isCurrentFavorite) {
-                                    Color(0xFFFFC107)
+                                contentDescription = if (isCurrentFavorite) {
+                                    "Удалить из избранного"
                                 } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                    "Добавить в избранное"
                                 }
                             )
                         }
 
-                        IconButton(
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        FilledTonalIconButton(
                             onClick = {
                                 val summary = buildShareText(
                                     first = firstAircraft,
@@ -1864,7 +1912,11 @@ fun AircraftCompareApp() {
                                 context.startActivity(
                                     Intent.createChooser(intent, "Поделиться сравнением")
                                 )
-                            }
+                            },
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Share,
@@ -2031,9 +2083,242 @@ fun AircraftCompareApp() {
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    EndOfPageEasterEgg(
+                        onBackToTop = {
+                            coroutineScope.launch {
+                                mainScrollState.animateScrollTo(0)
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
             }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(16.dp)
+            )
+            }
         }
+    }
+}
+
+@Composable
+private fun EndOfPageEasterEgg(
+    onBackToTop: () -> Unit
+) {
+    val context = LocalContext.current
+    val animationScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val takeoffDistance = with(density) { 54.dp.toPx() }
+    val planeOffsetY = remember { Animatable(0f) }
+    val planeAlpha = remember { Animatable(1f) }
+    var isLaunching by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Flight,
+                    contentDescription = "Взлетающий самолёт",
+                    modifier = Modifier
+                        .size(32.dp)
+                        .graphicsLayer {
+                            translationY = planeOffsetY.value
+                            alpha = planeAlpha.value
+                            val progress = (-planeOffsetY.value / takeoffDistance)
+                                .coerceIn(0f, 1f)
+                            scaleX = 1f + progress * 0.14f
+                            scaleY = 1f + progress * 0.14f
+                        },
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Здесь заканчивается страница, но не заканчивается любовь к авиации.",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "Готовы к новому кругу?",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            FilledTonalButton(
+                onClick = {
+                    if (!isLaunching) {
+                        animationScope.launch {
+                            isLaunching = true
+
+                            val takeoffJob = launch {
+                                planeOffsetY.animateTo(
+                                    targetValue = -takeoffDistance,
+                                    animationSpec = tween(
+                                        durationMillis = 520,
+                                        easing = FastOutSlowInEasing
+                                    )
+                                )
+                            }
+                            val fadeJob = launch {
+                                delay(170)
+                                planeAlpha.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = tween(durationMillis = 320)
+                                )
+                            }
+
+                            delay(260)
+                            onBackToTop()
+                            takeoffJob.join()
+                            fadeJob.join()
+
+                            planeOffsetY.snapTo(0f)
+                            planeAlpha.snapTo(1f)
+                            isLaunching = false
+                        }
+                    }
+                },
+                enabled = !isLaunching,
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 11.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.KeyboardArrowUp,
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp)
+                )
+                Spacer(modifier = Modifier.width(7.dp))
+                Text(
+                    text = if (isLaunching) "Взлетаем…" else "Вернуться наверх"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = "Автор проекта",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                SocialLinkButton(
+                    title = "Instagram",
+                    handle = "@grachevdm",
+                    icon = Icons.Outlined.PhotoCamera,
+                    onClick = {
+                        openExternalLink(
+                            context = context,
+                            url = "https://www.instagram.com/grachevdm/"
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+
+                SocialLinkButton(
+                    title = "Telegram",
+                    handle = "@GrachevDmtr",
+                    icon = Icons.Outlined.Send,
+                    onClick = {
+                        openExternalLink(
+                            context = context,
+                            url = "https://t.me/GrachevDmtr"
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SocialLinkButton(
+    title: String,
+    handle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(21.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = handle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+private fun openExternalLink(context: Context, url: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+    runCatching {
+        context.startActivity(intent)
     }
 }
 
@@ -2457,30 +2742,82 @@ private fun AircraftDetailRow(
 fun AircraftTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     val colors = if (darkTheme) {
         darkColorScheme(
-            primary = Color(0xFF90CAF9),
-            secondary = Color(0xFF64B5F6),
-            background = Color(0xFF101418),
-            surface = Color(0xFF1B2026)
+            primary = Color(0xFFBBC9D4),
+            onPrimary = Color(0xFF25333D),
+            primaryContainer = Color(0xFF3C4B57),
+            onPrimaryContainer = Color(0xFFDCE6ED),
+            secondary = Color(0xFFC0C8CE),
+            onSecondary = Color(0xFF2A343A),
+            secondaryContainer = Color(0xFF40494E),
+            onSecondaryContainer = Color(0xFFDCE3E7),
+            tertiary = Color(0xFFB8CCC3),
+            onTertiary = Color(0xFF23372F),
+            tertiaryContainer = Color(0xFF394E45),
+            onTertiaryContainer = Color(0xFFD5E9DF),
+            background = Color(0xFF111416),
+            onBackground = Color(0xFFE2E4E5),
+            surface = Color(0xFF191C1F),
+            onSurface = Color(0xFFE2E4E5),
+            surfaceVariant = Color(0xFF2A2F32),
+            onSurfaceVariant = Color(0xFFC3C7C9),
+            outline = Color(0xFF8D9295),
+            outlineVariant = Color(0xFF414649)
         )
     } else {
         lightColorScheme(
-            primary = Color(0xFF12355B),
-            secondary = Color(0xFF1976D2),
-            background = Color(0xFFF4F6F8),
-            surface = Color.White
+            primary = Color(0xFF344A5A),
+            onPrimary = Color.White,
+            primaryContainer = Color(0xFFDCE5EB),
+            onPrimaryContainer = Color(0xFF192B36),
+            secondary = Color(0xFF687A85),
+            onSecondary = Color.White,
+            secondaryContainer = Color(0xFFE1E7EA),
+            onSecondaryContainer = Color(0xFF26343B),
+            tertiary = Color(0xFF4F6B61),
+            onTertiary = Color.White,
+            tertiaryContainer = Color(0xFFDCE8E2),
+            onTertiaryContainer = Color(0xFF1B352C),
+            background = Color(0xFFF4F5F3),
+            onBackground = Color(0xFF1B1D1F),
+            surface = Color(0xFFFCFCFA),
+            onSurface = Color(0xFF1B1D1F),
+            surfaceVariant = Color(0xFFE9EBE8),
+            onSurfaceVariant = Color(0xFF5D6265),
+            outline = Color(0xFF777D80),
+            outlineVariant = Color(0xFFD1D5D3)
         )
     }
 
     val typography = Typography(
-        titleLarge = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
+        headlineSmall = MaterialTheme.typography.headlineSmall.copy(
+            fontWeight = FontWeight.Bold,
+            fontSize = 26.sp
+        ),
+        titleLarge = MaterialTheme.typography.titleLarge.copy(
+            fontWeight = FontWeight.Bold,
+            fontSize = 21.sp
+        ),
         titleMedium = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 17.sp),
         bodyLarge = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
-        bodyMedium = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-        bodySmall = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, color = Color.Gray),
-        labelLarge = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        bodyMedium = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+        bodySmall = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+        labelLarge = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
     )
 
-    MaterialTheme(colorScheme = colors, typography = typography, content = content)
+    val shapes = Shapes(
+        extraSmall = RoundedCornerShape(8.dp),
+        small = RoundedCornerShape(12.dp),
+        medium = RoundedCornerShape(16.dp),
+        large = RoundedCornerShape(20.dp),
+        extraLarge = RoundedCornerShape(28.dp)
+    )
+
+    MaterialTheme(
+        colorScheme = colors,
+        typography = typography,
+        shapes = shapes,
+        content = content
+    )
 }
 
 @Composable
@@ -2489,21 +2826,55 @@ fun Header(darkTheme: Boolean, onThemeChange: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Surface(
+            modifier = Modifier.size(50.dp),
+            shape = RoundedCornerShape(15.dp),
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Outlined.Flight,
+                    contentDescription = null,
+                    modifier = Modifier.size(27.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Aircraft Compare",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                text = stringResource(id = R.string.app_name),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1
             )
             Text(
                 text = "Сравнение ${aircraftList.size} моделей Boeing и Airbus",
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        FilledIconButton(onClick = onThemeChange) {
-            Text(text = if (darkTheme) "☀️" else "🌙", fontSize = 18.sp)
+        FilledTonalIconButton(
+            onClick = onThemeChange,
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Icon(
+                imageVector = if (darkTheme) {
+                    Icons.Outlined.LightMode
+                } else {
+                    Icons.Outlined.DarkMode
+                },
+                contentDescription = if (darkTheme) {
+                    "Включить светлую тему"
+                } else {
+                    "Включить тёмную тему"
+                }
+            )
         }
     }
 }
@@ -2513,47 +2884,235 @@ private fun UnitSystemSelector(
     selectedUnitSystem: UnitSystem,
     onUnitSystemSelected: (UnitSystem) -> Unit
 ) {
-    Row(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        UnitSystem.entries.forEach { unitSystem ->
-            val selected = unitSystem == selectedUnitSystem
-            val title = if (unitSystem == UnitSystem.METRIC) {
-                "Метрические"
-            } else {
-                "Авиационные"
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(
+                text = "Единицы измерения",
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                UnitSystem.entries.forEach { unitSystem ->
+                    val selected = unitSystem == selectedUnitSystem
+                    val title = if (unitSystem == UnitSystem.METRIC) {
+                        "Метрические"
+                    } else {
+                        "Авиационные"
+                    }
+                    val units = if (unitSystem == UnitSystem.METRIC) {
+                        "км/ч · км · м · кг"
+                    } else {
+                        "kt · NM · ft · lb"
+                    }
+
+                    Surface(
+                        onClick = { onUnitSystemSelected(unitSystem) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            Color.Transparent
+                        }
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = title,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = units,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
             }
-            val units = if (unitSystem == UnitSystem.METRIC) {
-                "км/ч · км · м · кг"
+        }
+    }
+}
+
+@Composable
+private fun SlidingSegmentedControl(
+    labels: List<String>,
+    selectedIndex: Int,
+    onSelectedIndex: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    icons: List<ImageVector?> = emptyList()
+) {
+    if (labels.isEmpty()) return
+
+    val density = LocalDensity.current
+    val hapticFeedback = LocalHapticFeedback.current
+    val safeSelectedIndex = selectedIndex.coerceIn(labels.indices)
+    var isDragging by remember { mutableStateOf(false) }
+    var dragOffsetPx by remember { mutableFloatStateOf(0f) }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .padding(4.dp)
+        ) {
+            val segmentWidth = maxWidth / labels.size.toFloat()
+            val segmentWidthPx = with(density) { segmentWidth.toPx() }
+            val maxOffsetPx = segmentWidthPx * (labels.size - 1)
+            val targetOffsetPx = if (isDragging) {
+                dragOffsetPx
             } else {
-                "kt · NM · ft · lb"
+                safeSelectedIndex * segmentWidthPx
+            }
+            val animatedOffsetPx by animateFloatAsState(
+                targetValue = targetOffsetPx,
+                animationSpec = tween(
+                    durationMillis = if (isDragging) 0 else 210,
+                    easing = FastOutSlowInEasing
+                ),
+                label = "segmented_control_offset"
+            )
+            val visualSelectedIndex = if (isDragging && segmentWidthPx > 0f) {
+                (dragOffsetPx / segmentWidthPx)
+                    .roundToInt()
+                    .coerceIn(labels.indices)
+            } else {
+                safeSelectedIndex
             }
 
-            Button(
-                onClick = { onUnitSystemSelected(unitSystem) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    contentColor = if (selected) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+            Surface(
+                modifier = Modifier
+                    .offset {
+                        IntOffset(animatedOffsetPx.roundToInt(), 0)
                     }
-                )
+                    .width(segmentWidth)
+                    .fillMaxHeight(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 1.dp
+            ) {}
+
+            Row(
+                modifier = Modifier
+                    .matchParentSize()
+                    .pointerInput(
+                        labels.size,
+                        safeSelectedIndex,
+                        segmentWidthPx
+                    ) {
+                        detectHorizontalDragGestures(
+                            onDragStart = {
+                                isDragging = true
+                                dragOffsetPx = safeSelectedIndex * segmentWidthPx
+                            },
+                            onDragEnd = {
+                                val destinationIndex = if (segmentWidthPx > 0f) {
+                                    (dragOffsetPx / segmentWidthPx)
+                                        .roundToInt()
+                                        .coerceIn(labels.indices)
+                                } else {
+                                    safeSelectedIndex
+                                }
+
+                                dragOffsetPx = destinationIndex * segmentWidthPx
+                                isDragging = false
+
+                                if (destinationIndex != safeSelectedIndex) {
+                                    hapticFeedback.performHapticFeedback(
+                                        HapticFeedbackType.TextHandleMove
+                                    )
+                                    onSelectedIndex(destinationIndex)
+                                }
+                            },
+                            onDragCancel = {
+                                dragOffsetPx = safeSelectedIndex * segmentWidthPx
+                                isDragging = false
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                dragOffsetPx = (dragOffsetPx + dragAmount)
+                                    .coerceIn(0f, maxOffsetPx)
+                            }
+                        )
+                    }
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = title,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp
-                    )
-                    Text(text = units, fontSize = 10.sp)
+                labels.forEachIndexed { index, label ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable {
+                                if (index != safeSelectedIndex) {
+                                    hapticFeedback.performHapticFeedback(
+                                        HapticFeedbackType.TextHandleMove
+                                    )
+                                    onSelectedIndex(index)
+                                }
+                            }
+                            .padding(horizontal = 5.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            icons.getOrNull(index)?.let { icon ->
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = if (index == visualSelectedIndex) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+
+                                Spacer(modifier = Modifier.width(7.dp))
+                            }
+
+                            Text(
+                                text = label,
+                                color = if (index == visualSelectedIndex) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                fontWeight = if (index == visualSelectedIndex) {
+                                    FontWeight.SemiBold
+                                } else {
+                                    FontWeight.Normal
+                                },
+                                maxLines = 1,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -2565,38 +3124,18 @@ private fun ComparisonSectionSelector(
     selectedSection: ComparisonSection,
     onSectionSelected: (ComparisonSection) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        ComparisonSection.entries.forEach { section ->
-            val selected = section == selectedSection
-            val title = when (section) {
-                ComparisonSection.PARAMETERS -> "Параметры"
-                ComparisonSection.ROUTE -> "Маршрут"
-            }
+    val sections = ComparisonSection.entries
+    val selectedIndex = sections.indexOf(selectedSection).coerceAtLeast(0)
 
-            Button(
-                onClick = { onSectionSelected(section) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    contentColor = if (selected) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            ) {
-                Text(title)
-            }
-        }
-    }
+    SlidingSegmentedControl(
+        labels = listOf("Характеристики", "Маршрут"),
+        selectedIndex = selectedIndex,
+        onSelectedIndex = { index ->
+            onSectionSelected(sections[index])
+        },
+        modifier = Modifier.fillMaxWidth(),
+        icons = listOf(Icons.Outlined.Settings, Icons.Outlined.Map)
+    )
 }
 
 @Composable
@@ -3231,38 +3770,38 @@ private fun SuitableAircraftRow(
 
 @Composable
 fun ManufacturerFilters(selectedManufacturer: String, onManufacturerSelected: (String) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        listOf("Все", "Boeing", "Airbus").forEach { manufacturer ->
-            val selected = selectedManufacturer == manufacturer
+    val manufacturers = remember { listOf("Все", "Boeing", "Airbus") }
+    val selectedIndex = manufacturers.indexOf(selectedManufacturer).coerceAtLeast(0)
 
-            Button(
-                onClick = { onManufacturerSelected(manufacturer) },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            ) {
-                Text(manufacturer)
-            }
-        }
-    }
+    SlidingSegmentedControl(
+        labels = manufacturers,
+        selectedIndex = selectedIndex,
+        onSelectedIndex = { index ->
+            onManufacturerSelected(manufacturers[index])
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable
 fun ManufacturerBadge(manufacturer: String) {
-    val color = if (manufacturer == "Boeing") Color(0xFF1565C0) else Color(0xFFC62828)
+    val color = if (manufacturer == "Boeing") {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.secondary
+    }
 
     Box(
         modifier = Modifier
-            .background(color.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .background(color.copy(alpha = 0.12f), shape = RoundedCornerShape(7.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
-        Text(text = manufacturer, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color)
+        Text(
+            text = manufacturer,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
     }
 }
 
@@ -3276,20 +3815,30 @@ fun SelectionCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Выбери самолёты", style = MaterialTheme.typography.titleLarge)
+            Text(text = "Самолёты для сравнения", style = MaterialTheme.typography.titleLarge)
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = "Нажми на модель, чтобы выбрать другую",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             AircraftSelector(
                 title = "Первый самолёт",
                 selected = firstAircraft,
                 options = options,
-                onSelected = onFirstSelected
+                onSelected = onFirstSelected,
+                accentColor = MaterialTheme.colorScheme.primary
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -3298,7 +3847,8 @@ fun SelectionCard(
                 title = "Второй самолёт",
                 selected = secondAircraft,
                 options = options,
-                onSelected = onSecondSelected
+                onSelected = onSecondSelected,
+                accentColor = MaterialTheme.colorScheme.secondary
             )
 
             if (options.isEmpty()) {
@@ -3314,9 +3864,11 @@ fun AircraftSelector(
     title: String,
     selected: Aircraft,
     options: List<Pair<Int, Aircraft>>,
-    onSelected: (Int) -> Unit
+    onSelected: (Int) -> Unit,
+    accentColor: Color? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val selectorAccent = accentColor ?: MaterialTheme.colorScheme.primary
     val groupedOptions = remember(options) {
         options
             .groupBy { (_, aircraft) -> aircraft.family }
@@ -3336,29 +3888,58 @@ fun AircraftSelector(
     }
 
     Column {
-        Text(text = title, style = MaterialTheme.typography.labelLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(18.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(selectorAccent)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        OutlinedButton(
+        Surface(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
-            ManufacturerBadge(selected.manufacturer)
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ManufacturerBadge(selected.manufacturer)
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = selected.model,
+                        textAlign = TextAlign.Start,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = selected.family,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = selected.model,
-                    textAlign = TextAlign.Start,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = selected.family,
-                    style = MaterialTheme.typography.bodySmall
+                    text = "⌄",
+                    color = selectorAccent,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
-            Text("▼")
         }
 
         if (expanded) {
@@ -3526,18 +4107,27 @@ private fun ComparisonTable(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             AircraftVisualComparison(
                 first = first,
                 second = second,
                 unitSystem = unitSystem
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            ComparisonHighlights(
+                first = first,
+                second = second,
+                unitSystem = unitSystem
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             HorizontalDivider()
 
@@ -3625,6 +4215,83 @@ private fun ComparisonTable(
                 right = second.engine
             )
         }
+    }
+}
+
+@Composable
+private fun ComparisonHighlights(
+    first: Aircraft,
+    second: Aircraft,
+    unitSystem: UnitSystem
+) {
+    val rangeDifferenceKm = abs(first.rangeKm - second.rangeKm).toDouble()
+    val speedDifferenceKmh = abs(first.cruiseSpeedKmh - second.cruiseSpeedKmh)
+
+    val rangeText = when {
+        first.rangeKm > second.rangeKm -> {
+            "${first.model} летит дальше на ${formatDistance(rangeDifferenceKm, unitSystem)}"
+        }
+        second.rangeKm > first.rangeKm -> {
+            "${second.model} летит дальше на ${formatDistance(rangeDifferenceKm, unitSystem)}"
+        }
+        else -> "Дальность полёта у моделей одинаковая"
+    }
+
+    val formattedSpeedDifference = when (unitSystem) {
+        UnitSystem.METRIC -> "$speedDifferenceKmh км/ч"
+        UnitSystem.AVIATION -> {
+            "${(speedDifferenceKmh * KMH_TO_KNOTS).roundToInt()} kt"
+        }
+    }
+    val speedText = when {
+        first.cruiseSpeedKmh > second.cruiseSpeedKmh -> {
+            "${first.model} быстрее на $formattedSpeedDifference"
+        }
+        second.cruiseSpeedKmh > first.cruiseSpeedKmh -> {
+            "${second.model} быстрее на $formattedSpeedDifference"
+        }
+        else -> "Крейсерская скорость у моделей одинаковая"
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.72f)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = "Коротко о разнице",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            ComparisonHighlightLine(rangeText)
+            Spacer(modifier = Modifier.height(5.dp))
+            ComparisonHighlightLine(speedText)
+        }
+    }
+}
+
+@Composable
+private fun ComparisonHighlightLine(text: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box(
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .size(5.dp)
+                .background(
+                    MaterialTheme.colorScheme.tertiary,
+                    CircleShape
+                )
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onTertiaryContainer
+        )
     }
 }
 
@@ -4755,8 +5422,8 @@ private fun AircraftVisualComparison(
     second: Aircraft,
     unitSystem: UnitSystem
 ) {
-    val firstColor = Color(0xFF1565C0)
-    val secondColor = Color(0xFF00838F)
+    val firstColor = MaterialTheme.colorScheme.primary
+    val secondColor = MaterialTheme.colorScheme.secondary
     val silhouetteColor = MaterialTheme.colorScheme.onSurface
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
     val minorGridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.055f)
@@ -4988,11 +5655,19 @@ fun ValueCell(text: String, highlighted: Boolean, modifier: Modifier) {
         text = text,
         modifier = modifier
             .background(
-                color = if (highlighted) Color(0xFFDFF5E1) else Color.Transparent,
+                color = if (highlighted) {
+                    MaterialTheme.colorScheme.tertiaryContainer
+                } else {
+                    Color.Transparent
+                },
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(vertical = 6.dp, horizontal = 3.dp),
-        color = if (highlighted) Color(0xFF123D18) else MaterialTheme.colorScheme.onSurface,
+        color = if (highlighted) {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
         textAlign = TextAlign.Center,
         fontSize = 13.sp,
         fontWeight = if (highlighted) FontWeight.Bold else FontWeight.Normal

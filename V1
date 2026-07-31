@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.FitnessCenter
 import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material.icons.outlined.Height
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LocalGasStation
@@ -3635,116 +3636,437 @@ private fun ComparisonTable(
     }
 }
 
+private enum class UpperDeckShape {
+    NONE,
+    BOEING_747_HUMP,
+    AIRBUS_A380_FULL
+}
+
+private data class AircraftSilhouetteStyle(
+    val engineCount: Int,
+    val wingPosition: Float,
+    val wingSweep: Float,
+    val engineScale: Float,
+    val tailScale: Float,
+    val upperDeckShape: UpperDeckShape = UpperDeckShape.NONE,
+    val hasWinglets: Boolean = false,
+    val pointedNose: Boolean = false
+)
+
+private fun silhouetteStyle(aircraft: Aircraft): AircraftSilhouetteStyle {
+    return when {
+        aircraft.family == "Boeing 747" -> AircraftSilhouetteStyle(
+            engineCount = 4,
+            wingPosition = 0.45f,
+            wingSweep = 0.82f,
+            engineScale = 0.9f,
+            tailScale = 1.08f,
+            upperDeckShape = UpperDeckShape.BOEING_747_HUMP,
+            pointedNose = true
+        )
+
+        aircraft.family == "Airbus A380" -> AircraftSilhouetteStyle(
+            engineCount = 4,
+            wingPosition = 0.43f,
+            wingSweep = 0.68f,
+            engineScale = 1.05f,
+            tailScale = 1.12f,
+            upperDeckShape = UpperDeckShape.AIRBUS_A380_FULL
+        )
+
+        aircraft.family == "Airbus A340" -> AircraftSilhouetteStyle(
+            engineCount = 4,
+            wingPosition = 0.47f,
+            wingSweep = 0.76f,
+            engineScale = 0.72f,
+            tailScale = 1.04f
+        )
+
+        aircraft.family.contains("787") -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.45f,
+            wingSweep = 0.92f,
+            engineScale = 1.22f,
+            tailScale = 0.95f,
+            pointedNose = true
+        )
+
+        aircraft.family.contains("777") -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.46f,
+            wingSweep = 0.88f,
+            engineScale = 1.3f,
+            tailScale = 1.02f,
+            pointedNose = true
+        )
+
+        aircraft.family.contains("A350") -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.46f,
+            wingSweep = 0.9f,
+            engineScale = 1.18f,
+            tailScale = 0.98f,
+            pointedNose = true
+        )
+
+        aircraft.family.contains("A330") -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.45f,
+            wingSweep = 0.78f,
+            engineScale = 1.08f,
+            tailScale = 1f
+        )
+
+        aircraft.family == "Boeing 767" -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.46f,
+            wingSweep = 0.72f,
+            engineScale = 1f,
+            tailScale = 1f,
+            pointedNose = true
+        )
+
+        aircraft.family == "Boeing 757" -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.48f,
+            wingSweep = 0.66f,
+            engineScale = 0.92f,
+            tailScale = 1.08f,
+            pointedNose = true
+        )
+
+        aircraft.family == "Airbus A220" -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.45f,
+            wingSweep = 0.64f,
+            engineScale = 1.08f,
+            tailScale = 0.94f
+        )
+
+        aircraft.family.contains("737 MAX") -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.46f,
+            wingSweep = 0.7f,
+            engineScale = 1.05f,
+            tailScale = 1f,
+            hasWinglets = true,
+            pointedNose = true
+        )
+
+        aircraft.family.contains("737") -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.47f,
+            wingSweep = 0.62f,
+            engineScale = 0.86f,
+            tailScale = 1f,
+            pointedNose = true
+        )
+
+        aircraft.family.contains("A320neo") -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.46f,
+            wingSweep = 0.6f,
+            engineScale = 1.04f,
+            tailScale = 0.96f,
+            hasWinglets = true
+        )
+
+        else -> AircraftSilhouetteStyle(
+            engineCount = 2,
+            wingPosition = 0.46f,
+            wingSweep = 0.58f,
+            engineScale = 0.9f,
+            tailScale = 0.96f
+        )
+    }
+}
+
 private fun DrawScope.drawAircraftTopView(
+    aircraft: Aircraft,
     centerX: Float,
     topY: Float,
-    lengthPx: Float,
-    wingspanPx: Float,
+    scale: Float,
     color: Color
 ) {
-    val fuselageWidth = (wingspanPx * 0.09f).coerceIn(7f, 17f)
-    val wingY = topY + lengthPx * 0.42f
-    val wingDepth = lengthPx * 0.13f
-    val tailY = topY + lengthPx * 0.79f
-    val tailDepth = lengthPx * 0.08f
-    val tailSpan = wingspanPx * 0.34f
+    val style = silhouetteStyle(aircraft)
+    val lengthPx = aircraft.lengthM.toFloat() * scale
+    val wingspanPx = aircraft.wingspanM.toFloat() * scale
+    val fuselageWidth = (aircraft.cabinWidthM.toFloat() * scale * 1.13f)
+        .coerceAtLeast(6f)
+    val wingY = topY + lengthPx * style.wingPosition
+    val wingDepth = lengthPx * (0.13f + style.wingSweep * 0.055f)
+    val tipLeadingY = wingY + wingDepth * style.wingSweep
+    val tipTrailingY = tipLeadingY + wingDepth * 0.2f
+    val rootTrailingY = wingY + wingDepth
+    val tailY = topY + lengthPx * 0.8f
+    val tailDepth = lengthPx * 0.075f
+    val tailSpan = wingspanPx * 0.32f * style.tailScale
 
     val wings = Path().apply {
-        moveTo(centerX - fuselageWidth * 0.35f, wingY)
-        lineTo(centerX - wingspanPx / 2f, wingY + wingDepth * 0.65f)
-        lineTo(centerX - wingspanPx / 2f, wingY + wingDepth)
-        lineTo(centerX - fuselageWidth * 0.45f, wingY + wingDepth * 0.55f)
-        lineTo(centerX + fuselageWidth * 0.45f, wingY + wingDepth * 0.55f)
-        lineTo(centerX + wingspanPx / 2f, wingY + wingDepth)
-        lineTo(centerX + wingspanPx / 2f, wingY + wingDepth * 0.65f)
-        lineTo(centerX + fuselageWidth * 0.35f, wingY)
+        moveTo(centerX - fuselageWidth * 0.36f, wingY)
+        lineTo(centerX - wingspanPx / 2f, tipLeadingY)
+        lineTo(centerX - wingspanPx / 2f, tipTrailingY)
+        lineTo(centerX - fuselageWidth * 0.44f, rootTrailingY)
+        lineTo(centerX + fuselageWidth * 0.44f, rootTrailingY)
+        lineTo(centerX + wingspanPx / 2f, tipTrailingY)
+        lineTo(centerX + wingspanPx / 2f, tipLeadingY)
+        lineTo(centerX + fuselageWidth * 0.36f, wingY)
         close()
     }
     drawPath(wings, color.copy(alpha = 0.82f))
 
     val tailPlane = Path().apply {
-        moveTo(centerX - fuselageWidth * 0.4f, tailY)
+        moveTo(centerX - fuselageWidth * 0.35f, tailY)
+        lineTo(centerX - tailSpan / 2f, tailY + tailDepth * 0.72f)
         lineTo(centerX - tailSpan / 2f, tailY + tailDepth)
-        lineTo(centerX - tailSpan / 2f, tailY + tailDepth * 1.35f)
-        lineTo(centerX + tailSpan / 2f, tailY + tailDepth * 1.35f)
+        lineTo(centerX - fuselageWidth * 0.4f, tailY + tailDepth * 0.55f)
+        lineTo(centerX + fuselageWidth * 0.4f, tailY + tailDepth * 0.55f)
         lineTo(centerX + tailSpan / 2f, tailY + tailDepth)
-        lineTo(centerX + fuselageWidth * 0.4f, tailY)
+        lineTo(centerX + tailSpan / 2f, tailY + tailDepth * 0.72f)
+        lineTo(centerX + fuselageWidth * 0.35f, tailY)
         close()
     }
     drawPath(tailPlane, color.copy(alpha = 0.9f))
 
-    drawRoundRect(
-        color = color,
-        topLeft = Offset(centerX - fuselageWidth / 2f, topY),
-        size = Size(fuselageWidth, lengthPx),
-        cornerRadius = CornerRadius(fuselageWidth / 2f, fuselageWidth / 2f)
-    )
+    val fuselage = Path().apply {
+        moveTo(centerX, topY)
+        cubicTo(
+            centerX - fuselageWidth * 0.62f,
+            topY + lengthPx * if (style.pointedNose) 0.055f else 0.035f,
+            centerX - fuselageWidth / 2f,
+            topY + lengthPx * 0.09f,
+            centerX - fuselageWidth / 2f,
+            topY + lengthPx * 0.14f
+        )
+        lineTo(centerX - fuselageWidth * 0.38f, topY + lengthPx * 0.93f)
+        lineTo(centerX, topY + lengthPx)
+        lineTo(centerX + fuselageWidth * 0.38f, topY + lengthPx * 0.93f)
+        lineTo(centerX + fuselageWidth / 2f, topY + lengthPx * 0.14f)
+        cubicTo(
+            centerX + fuselageWidth / 2f,
+            topY + lengthPx * 0.09f,
+            centerX + fuselageWidth * 0.62f,
+            topY + lengthPx * if (style.pointedNose) 0.055f else 0.035f,
+            centerX,
+            topY
+        )
+        close()
+    }
+    drawPath(fuselage, color)
 
-    val engineWidth = (fuselageWidth * 0.7f).coerceAtLeast(5f)
-    val engineLength = lengthPx * 0.11f
-    val engineOffset = wingspanPx * 0.2f
-    listOf(-engineOffset, engineOffset).forEach { offset ->
+    val engineWidth = (fuselageWidth * 0.7f * style.engineScale)
+        .coerceAtLeast(4.5f)
+    val engineLength = lengthPx * 0.105f * style.engineScale
+    val engineOffsets = if (style.engineCount == 4) {
+        listOf(
+            -wingspanPx * 0.34f,
+            -wingspanPx * 0.17f,
+            wingspanPx * 0.17f,
+            wingspanPx * 0.34f
+        )
+    } else {
+        listOf(-wingspanPx * 0.21f, wingspanPx * 0.21f)
+    }
+
+    engineOffsets.forEach { offset ->
         drawRoundRect(
-            color = color.copy(alpha = 0.72f),
+            color = color.copy(alpha = 0.68f),
             topLeft = Offset(
                 centerX + offset - engineWidth / 2f,
-                wingY + wingDepth * 0.38f
+                wingY + wingDepth * 0.3f
             ),
             size = Size(engineWidth, engineLength),
             cornerRadius = CornerRadius(engineWidth / 2f, engineWidth / 2f)
         )
     }
+
+    if (style.hasWinglets) {
+        listOf(-1f, 1f).forEach { direction ->
+            val tipX = centerX + direction * wingspanPx / 2f
+            drawLine(
+                color = color,
+                start = Offset(tipX, tipLeadingY),
+                end = Offset(
+                    tipX + direction * wingspanPx * 0.035f,
+                    tipLeadingY - lengthPx * 0.025f
+                ),
+                strokeWidth = 3f
+            )
+        }
+    }
+
+    drawLine(
+        color = Color.White.copy(alpha = 0.65f),
+        start = Offset(centerX - fuselageWidth * 0.26f, topY + lengthPx * 0.075f),
+        end = Offset(centerX + fuselageWidth * 0.26f, topY + lengthPx * 0.075f),
+        strokeWidth = 1.5f
+    )
 }
 
 private fun DrawScope.drawAircraftSideView(
+    aircraft: Aircraft,
     leftX: Float,
     baselineY: Float,
-    lengthPx: Float,
-    heightPx: Float,
+    scale: Float,
     color: Color
 ) {
-    val bodyHeight = (heightPx * 0.27f).coerceAtLeast(7f)
-    val bodyBottom = baselineY - heightPx * 0.18f
-    val bodyTop = bodyBottom - bodyHeight
+    val style = silhouetteStyle(aircraft)
+    val lengthPx = aircraft.lengthM.toFloat() * scale
+    val heightPx = aircraft.heightM.toFloat() * scale
+    val fuselageDepth = (aircraft.cabinWidthM.toFloat() * scale * 1.08f)
+        .coerceAtLeast(7f)
+    val bodyBottom = baselineY - heightPx * 0.19f
+    val bodyTop = bodyBottom - fuselageDepth
 
-    drawRoundRect(
-        color = color,
-        topLeft = Offset(leftX, bodyTop),
-        size = Size(lengthPx, bodyHeight),
-        cornerRadius = CornerRadius(bodyHeight / 2f, bodyHeight / 2f)
-    )
+    when (style.upperDeckShape) {
+        UpperDeckShape.BOEING_747_HUMP -> {
+            val hump = Path().apply {
+                moveTo(leftX + lengthPx * 0.07f, bodyTop)
+                cubicTo(
+                    leftX + lengthPx * 0.11f,
+                    bodyTop - fuselageDepth * 0.62f,
+                    leftX + lengthPx * 0.24f,
+                    bodyTop - fuselageDepth * 0.72f,
+                    leftX + lengthPx * 0.34f,
+                    bodyTop - fuselageDepth * 0.52f
+                )
+                lineTo(leftX + lengthPx * 0.48f, bodyTop)
+                close()
+            }
+            drawPath(hump, color)
+        }
+
+        UpperDeckShape.AIRBUS_A380_FULL -> {
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(
+                    leftX + lengthPx * 0.055f,
+                    bodyTop - fuselageDepth * 0.48f
+                ),
+                size = Size(lengthPx * 0.78f, fuselageDepth * 0.72f),
+                cornerRadius = CornerRadius(
+                    fuselageDepth * 0.36f,
+                    fuselageDepth * 0.36f
+                )
+            )
+        }
+
+        UpperDeckShape.NONE -> Unit
+    }
+
+    val fuselage = Path().apply {
+        moveTo(leftX, bodyTop + fuselageDepth * 0.58f)
+        cubicTo(
+            leftX + lengthPx * if (style.pointedNose) 0.035f else 0.055f,
+            bodyTop - fuselageDepth * 0.05f,
+            leftX + lengthPx * 0.09f,
+            bodyTop,
+            leftX + lengthPx * 0.16f,
+            bodyTop
+        )
+        lineTo(leftX + lengthPx * 0.9f, bodyTop)
+        lineTo(leftX + lengthPx, bodyTop + fuselageDepth * 0.42f)
+        lineTo(leftX + lengthPx * 0.92f, bodyBottom)
+        lineTo(leftX + lengthPx * 0.11f, bodyBottom)
+        cubicTo(
+            leftX + lengthPx * 0.055f,
+            bodyBottom,
+            leftX + lengthPx * 0.02f,
+            bodyTop + fuselageDepth * 0.82f,
+            leftX,
+            bodyTop + fuselageDepth * 0.58f
+        )
+        close()
+    }
+    drawPath(fuselage, color)
 
     val tailFin = Path().apply {
         moveTo(leftX + lengthPx * 0.79f, bodyTop)
-        lineTo(leftX + lengthPx * 0.9f, baselineY - heightPx)
+        lineTo(
+            leftX + lengthPx * 0.89f,
+            baselineY - heightPx * style.tailScale
+        )
         lineTo(leftX + lengthPx * 0.97f, bodyTop)
         close()
     }
-    drawPath(tailFin, color.copy(alpha = 0.9f))
+    drawPath(tailFin, color.copy(alpha = 0.92f))
 
+    val wingRootX = leftX + lengthPx * style.wingPosition
     val wing = Path().apply {
-        moveTo(leftX + lengthPx * 0.36f, bodyBottom - bodyHeight * 0.2f)
-        lineTo(leftX + lengthPx * 0.69f, bodyBottom + heightPx * 0.12f)
-        lineTo(leftX + lengthPx * 0.73f, bodyBottom + heightPx * 0.18f)
-        lineTo(leftX + lengthPx * 0.49f, bodyBottom)
+        moveTo(wingRootX - lengthPx * 0.08f, bodyBottom - fuselageDepth * 0.18f)
+        lineTo(
+            wingRootX + lengthPx * (0.19f + style.wingSweep * 0.07f),
+            bodyBottom + heightPx * 0.11f
+        )
+        lineTo(
+            wingRootX + lengthPx * (0.22f + style.wingSweep * 0.07f),
+            bodyBottom + heightPx * 0.16f
+        )
+        lineTo(wingRootX + lengthPx * 0.05f, bodyBottom)
         close()
     }
-    drawPath(wing, color.copy(alpha = 0.74f))
+    drawPath(wing, color.copy(alpha = 0.72f))
 
-    val engineWidth = lengthPx * 0.13f
-    val engineHeight = (heightPx * 0.16f).coerceAtLeast(5f)
-    drawRoundRect(
-        color = color.copy(alpha = 0.78f),
-        topLeft = Offset(
-            leftX + lengthPx * 0.48f,
-            bodyBottom + heightPx * 0.05f
-        ),
-        size = Size(engineWidth, engineHeight),
-        cornerRadius = CornerRadius(engineHeight / 2f, engineHeight / 2f)
-    )
+    val visibleEngineCount = if (style.engineCount == 4) 2 else 1
+    val engineWidth = lengthPx * 0.115f * style.engineScale
+    val engineHeight = (fuselageDepth * 0.65f * style.engineScale)
+        .coerceAtLeast(5f)
+    repeat(visibleEngineCount) { engineIndex ->
+        val engineX = if (visibleEngineCount == 1) {
+            wingRootX + lengthPx * 0.02f
+        } else {
+            wingRootX - lengthPx * 0.025f + engineIndex * lengthPx * 0.11f
+        }
+        drawRoundRect(
+            color = color.copy(alpha = 0.68f),
+            topLeft = Offset(engineX, bodyBottom + heightPx * 0.035f),
+            size = Size(engineWidth, engineHeight),
+            cornerRadius = CornerRadius(engineHeight / 2f, engineHeight / 2f)
+        )
+        drawCircle(
+            color = color.copy(alpha = 0.95f),
+            radius = engineHeight * 0.32f,
+            center = Offset(
+                engineX + engineHeight * 0.42f,
+                bodyBottom + heightPx * 0.035f + engineHeight / 2f
+            )
+        )
+    }
+
+    val windowY = bodyTop + fuselageDepth * 0.38f
+    val firstWindowX = leftX + lengthPx * 0.13f
+    val windowEndX = leftX + lengthPx * 0.8f
+    val windowCount = if (style.upperDeckShape == UpperDeckShape.AIRBUS_A380_FULL) 13 else 10
+    repeat(windowCount) { index ->
+        val fraction = index.toFloat() / (windowCount - 1).coerceAtLeast(1)
+        val windowX = firstWindowX + (windowEndX - firstWindowX) * fraction
+        drawCircle(
+            color = Color.White.copy(alpha = 0.72f),
+            radius = (fuselageDepth * 0.075f).coerceAtLeast(1.1f),
+            center = Offset(windowX, windowY)
+        )
+    }
+
+    if (style.upperDeckShape != UpperDeckShape.NONE) {
+        val upperWindowY = bodyTop - fuselageDepth * 0.17f
+        val upperEndFraction = if (
+            style.upperDeckShape == UpperDeckShape.BOEING_747_HUMP
+        ) 0.43f else 0.76f
+        repeat(if (style.upperDeckShape == UpperDeckShape.BOEING_747_HUMP) 5 else 11) { index ->
+            val count = if (style.upperDeckShape == UpperDeckShape.BOEING_747_HUMP) 5 else 11
+            val fraction = index.toFloat() / (count - 1).coerceAtLeast(1)
+            val windowX = leftX + lengthPx * 0.14f +
+                    lengthPx * (upperEndFraction - 0.14f) * fraction
+            drawCircle(
+                color = Color.White.copy(alpha = 0.68f),
+                radius = (fuselageDepth * 0.065f).coerceAtLeast(1f),
+                center = Offset(windowX, upperWindowY)
+            )
+        }
+    }
 
     drawLine(
-        color = color.copy(alpha = 0.45f),
+        color = color.copy(alpha = 0.42f),
         start = Offset(leftX, baselineY),
         end = Offset(leftX + lengthPx, baselineY),
         strokeWidth = 2f
@@ -3789,13 +4111,27 @@ private fun AircraftVisualComparison(
                 selected = viewMode == AircraftViewMode.SIDE,
                 onClick = { viewModeName = AircraftViewMode.SIDE.name },
                 modifier = Modifier.weight(1f),
-                label = { Text("Сбоку") }
+                label = { Text("Сбоку") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.FlightTakeoff,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             )
             FilterChip(
                 selected = viewMode == AircraftViewMode.TOP,
                 onClick = { viewModeName = AircraftViewMode.TOP.name },
                 modifier = Modifier.weight(1f),
-                label = { Text("Сверху") }
+                label = { Text("Сверху") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Flight,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             )
         }
 
@@ -3832,17 +4168,17 @@ private fun AircraftVisualComparison(
                         val baseline = size.height / 2f + maxHeightPx / 2f
 
                         drawAircraftSideView(
+                            aircraft = first,
                             leftX = halfWidth * 0.09f,
                             baselineY = baseline,
-                            lengthPx = first.lengthM.toFloat() * scale,
-                            heightPx = first.heightM.toFloat() * scale,
+                            scale = scale,
                             color = firstColor
                         )
                         drawAircraftSideView(
+                            aircraft = second,
                             leftX = halfWidth * 1.09f,
                             baselineY = baseline,
-                            lengthPx = second.lengthM.toFloat() * scale,
-                            heightPx = second.heightM.toFloat() * scale,
+                            scale = scale,
                             color = secondColor
                         )
                     } else {
@@ -3855,17 +4191,17 @@ private fun AircraftVisualComparison(
                         val topY = size.height * 0.05f
 
                         drawAircraftTopView(
+                            aircraft = first,
                             centerX = halfWidth * 0.5f,
                             topY = topY,
-                            lengthPx = first.lengthM.toFloat() * scale,
-                            wingspanPx = first.wingspanM.toFloat() * scale,
+                            scale = scale,
                             color = firstColor
                         )
                         drawAircraftTopView(
+                            aircraft = second,
                             centerX = halfWidth * 1.5f,
                             topY = topY,
-                            lengthPx = second.lengthM.toFloat() * scale,
-                            wingspanPx = second.wingspanM.toFloat() * scale,
+                            scale = scale,
                             color = secondColor
                         )
                     }
@@ -3913,6 +4249,12 @@ private fun AircraftVisualLabel(
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             maxLines = 2
+        )
+        Text(
+            text = "${silhouetteStyle(aircraft).engineCount} двигателя",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp,
+            textAlign = TextAlign.Center
         )
         Text(
             text = if (viewMode == AircraftViewMode.SIDE) {

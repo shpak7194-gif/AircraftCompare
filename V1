@@ -16,6 +16,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -52,7 +53,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -1216,6 +1222,7 @@ private val routeAirports = listOf(
     RouteAirport("Иркутск", "IKT", "Иркутск", "Россия и СНГ", GeoPoint(52.2680, 104.3889)),
     RouteAirport("Сочи", "AER", "Сочи", "Россия и СНГ", GeoPoint(43.4499, 39.9566)),
     RouteAirport("Казань", "KZN", "Казань", "Россия и СНГ", GeoPoint(55.6062, 49.2787)),
+    RouteAirport("Самара", "KUF", "Курумоч", "Россия и СНГ", GeoPoint(53.5049, 50.1643)),
     RouteAirport("Алматы", "ALA", "Алматы", "Россия и СНГ", GeoPoint(43.3521, 77.0405)),
     RouteAirport("Ташкент", "TAS", "Ташкент", "Россия и СНГ", GeoPoint(41.2579, 69.2812)),
     RouteAirport("Баку", "GYD", "Гейдар Алиев", "Россия и СНГ", GeoPoint(40.4675, 50.0467)),
@@ -1307,14 +1314,62 @@ private enum class RouteMapMode {
     REACHABLE
 }
 
+private enum class AircraftViewMode {
+    SIDE,
+    TOP
+}
+
 private enum class RouteStatus {
     COMFORTABLE,
     TIGHT,
+    STOPOVER,
     INSUFFICIENT
 }
 
-private fun routeStatus(distanceKm: Double, rangeKm: Int): RouteStatus {
+private data class StopoverOption(
+    val airport: RouteAirport,
+    val firstLegKm: Double,
+    val secondLegKm: Double
+) {
+    val totalDistanceKm: Double
+        get() = firstLegKm + secondLegKm
+}
+
+private fun findBestStopover(
+    origin: RouteAirport,
+    destination: RouteAirport,
+    aircraft: Aircraft
+): StopoverOption? {
+    val directDistance = haversineKm(origin.point, destination.point)
+    if (directDistance <= aircraft.rangeKm) return null
+
+    return routeAirports
+        .asSequence()
+        .filter { it != origin && it != destination }
+        .map { airport ->
+            StopoverOption(
+                airport = airport,
+                firstLegKm = haversineKm(origin.point, airport.point),
+                secondLegKm = haversineKm(airport.point, destination.point)
+            )
+        }
+        .filter { option ->
+            option.firstLegKm <= aircraft.rangeKm &&
+                    option.secondLegKm <= aircraft.rangeKm
+        }
+        .minWithOrNull(
+            compareBy<StopoverOption> { it.totalDistanceKm }
+                .thenBy { max(it.firstLegKm, it.secondLegKm) }
+        )
+}
+
+private fun routeStatus(
+    distanceKm: Double,
+    rangeKm: Int,
+    hasStopover: Boolean = false
+): RouteStatus {
     return when {
+        distanceKm > rangeKm && hasStopover -> RouteStatus.STOPOVER
         distanceKm > rangeKm -> RouteStatus.INSUFFICIENT
         distanceKm > rangeKm * 0.9 -> RouteStatus.TIGHT
         else -> RouteStatus.COMFORTABLE
@@ -1325,6 +1380,7 @@ private fun routeStatusColor(status: RouteStatus): Color {
     return when (status) {
         RouteStatus.COMFORTABLE -> Color(0xFF2E7D32)
         RouteStatus.TIGHT -> Color(0xFFF57F17)
+        RouteStatus.STOPOVER -> Color(0xFFEF6C00)
         RouteStatus.INSUFFICIENT -> Color(0xFFC62828)
     }
 }
@@ -1333,6 +1389,7 @@ private fun routeStatusMapColor(status: RouteStatus): Int {
     return when (status) {
         RouteStatus.COMFORTABLE -> 0xFF2E7D32.toInt()
         RouteStatus.TIGHT -> 0xFFF9A825.toInt()
+        RouteStatus.STOPOVER -> 0xFFEF6C00.toInt()
         RouteStatus.INSUFFICIENT -> 0xFFC62828.toInt()
     }
 }
@@ -1965,7 +2022,7 @@ fun AircraftCompareApp() {
 
                             Text(
                                 text = if (routeMapMode == RouteMapMode.ROUTE) {
-                                    "Зелёный маршрут — уверенный запас, жёлтый — почти предел, красный — дальности недостаточно."
+                                    "Зелёный — уверенный запас, жёлтый — почти предел, оранжевый — нужна посадка, красный — подходящего варианта нет."
                                 } else {
                                     "На карте показаны аэропорты из базы, доступные в пределах справочной дальности самолёта."
                                 },
@@ -2881,11 +2938,25 @@ private fun RouteResultCard(
     distanceKm: Double,
     unitSystem: UnitSystem
 ) {
-    val status = routeStatus(distanceKm, aircraft.rangeKm)
+    val stopover = remember(origin.code, destination.code, aircraft.fullName) {
+        findBestStopover(origin, destination, aircraft)
+    }
+    val status = routeStatus(
+        distanceKm = distanceKm,
+        rangeKm = aircraft.rangeKm,
+        hasStopover = stopover != null
+    )
     val statusColor = routeStatusColor(status)
     val rangeDifference = aircraft.rangeKm - distanceKm
     val reservePercent = rangeDifference / aircraft.rangeKm * 100.0
-    val flightTime = estimatedFlightMinutes(distanceKm, aircraft.cruiseSpeedKmh)
+    val plannedDistance = stopover?.totalDistanceKm ?: distanceKm
+    val flightTime = if (stopover == null) {
+        estimatedFlightMinutes(distanceKm, aircraft.cruiseSpeedKmh)
+    } else {
+        estimatedFlightMinutes(stopover.firstLegKm, aircraft.cruiseSpeedKmh) +
+                estimatedFlightMinutes(stopover.secondLegKm, aircraft.cruiseSpeedKmh) +
+                45
+    }
     val routeClass = when {
         distanceKm < 1500 -> "Короткий"
         distanceKm < 4000 -> "Средний"
@@ -2894,6 +2965,7 @@ private fun RouteResultCard(
     val statusText = when (status) {
         RouteStatus.COMFORTABLE -> "Долетит с запасом"
         RouteStatus.TIGHT -> "Почти на пределе"
+        RouteStatus.STOPOVER -> "Долетит с одной промежуточной посадкой"
         RouteStatus.INSUFFICIENT -> "Дальности недостаточно"
     }
 
@@ -2926,8 +2998,8 @@ private fun RouteResultCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 RouteMetric(
-                    title = "Расстояние",
-                    value = formatDistance(distanceKm, unitSystem),
+                    title = if (stopover == null) "Расстояние" else "Весь маршрут",
+                    value = formatDistance(plannedDistance, unitSystem),
                     modifier = Modifier.weight(1f)
                 )
                 RouteMetric(
@@ -2943,19 +3015,69 @@ private fun RouteResultCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                RouteMetric(
-                    title = if (rangeDifference >= 0) "Запас" else "Не хватает",
-                    value = "${
-                        formatDistance(abs(rangeDifference), unitSystem)
-                    } · ${abs(reservePercent).roundToInt()}%",
-                    modifier = Modifier.weight(1f),
-                    valueColor = statusColor
-                )
-                RouteMetric(
-                    title = "Тип маршрута",
-                    value = routeClass,
-                    modifier = Modifier.weight(1f)
-                )
+                if (stopover == null) {
+                    RouteMetric(
+                        title = if (rangeDifference >= 0) "Запас" else "Не хватает",
+                        value = "${
+                            formatDistance(abs(rangeDifference), unitSystem)
+                        } · ${abs(reservePercent).roundToInt()}%",
+                        modifier = Modifier.weight(1f),
+                        valueColor = statusColor
+                    )
+                    RouteMetric(
+                        title = "Тип маршрута",
+                        value = routeClass,
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    RouteMetric(
+                        title = "Посадка",
+                        value = stopover.airport.displayName,
+                        modifier = Modifier.weight(1f),
+                        valueColor = statusColor
+                    )
+                    RouteMetric(
+                        title = "Участки",
+                        value = "${formatDistance(stopover.firstLegKm, unitSystem)} + ${
+                            formatDistance(stopover.secondLegKm, unitSystem)
+                        }",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            if (stopover != null) {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Промежуточная посадка · ${stopover.airport.airportName}",
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "${origin.code} → ${stopover.airport.code} → ${destination.code}",
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "Дополнительное расстояние: ${
+                                formatDistance(
+                                    stopover.totalDistanceKm - distanceKm,
+                                    unitSystem
+                                )
+                            }",
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -3054,7 +3176,7 @@ private fun SuitableAircraftRow(
 ) {
     Column {
         Text(
-            text = "Подходящие самолёты",
+            text = "Самолёты для прямого маршрута",
             style = MaterialTheme.typography.titleMedium
         )
 
@@ -3062,13 +3184,13 @@ private fun SuitableAircraftRow(
 
         if (aircraftOptions.isEmpty()) {
             Text(
-                text = "В текущей базе нет самолёта с достаточной дальностью.",
+                text = "В текущей базе нет самолёта, который пройдёт маршрут без посадки.",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium
             )
         } else {
             Text(
-                text = "Нажми на модель, чтобы сразу показать её маршрут",
+                text = "Нажми на модель, чтобы построить прямой маршрут",
                 style = MaterialTheme.typography.bodySmall
             )
 
@@ -3416,6 +3538,18 @@ private fun ComparisonTable(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            AircraftVisualComparison(
+                first = first,
+                second = second,
+                unitSystem = unitSystem
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            HorizontalDivider()
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Row(modifier = Modifier.fillMaxWidth()) {
                 Text(text = "Параметр", modifier = Modifier.weight(1.2f), style = MaterialTheme.typography.labelLarge)
                 AircraftDetailsButton(
@@ -3498,6 +3632,301 @@ private fun ComparisonTable(
                 right = second.engine
             )
         }
+    }
+}
+
+private fun DrawScope.drawAircraftTopView(
+    centerX: Float,
+    topY: Float,
+    lengthPx: Float,
+    wingspanPx: Float,
+    color: Color
+) {
+    val fuselageWidth = (wingspanPx * 0.09f).coerceIn(7f, 17f)
+    val wingY = topY + lengthPx * 0.42f
+    val wingDepth = lengthPx * 0.13f
+    val tailY = topY + lengthPx * 0.79f
+    val tailDepth = lengthPx * 0.08f
+    val tailSpan = wingspanPx * 0.34f
+
+    val wings = Path().apply {
+        moveTo(centerX - fuselageWidth * 0.35f, wingY)
+        lineTo(centerX - wingspanPx / 2f, wingY + wingDepth * 0.65f)
+        lineTo(centerX - wingspanPx / 2f, wingY + wingDepth)
+        lineTo(centerX - fuselageWidth * 0.45f, wingY + wingDepth * 0.55f)
+        lineTo(centerX + fuselageWidth * 0.45f, wingY + wingDepth * 0.55f)
+        lineTo(centerX + wingspanPx / 2f, wingY + wingDepth)
+        lineTo(centerX + wingspanPx / 2f, wingY + wingDepth * 0.65f)
+        lineTo(centerX + fuselageWidth * 0.35f, wingY)
+        close()
+    }
+    drawPath(wings, color.copy(alpha = 0.82f))
+
+    val tailPlane = Path().apply {
+        moveTo(centerX - fuselageWidth * 0.4f, tailY)
+        lineTo(centerX - tailSpan / 2f, tailY + tailDepth)
+        lineTo(centerX - tailSpan / 2f, tailY + tailDepth * 1.35f)
+        lineTo(centerX + tailSpan / 2f, tailY + tailDepth * 1.35f)
+        lineTo(centerX + tailSpan / 2f, tailY + tailDepth)
+        lineTo(centerX + fuselageWidth * 0.4f, tailY)
+        close()
+    }
+    drawPath(tailPlane, color.copy(alpha = 0.9f))
+
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(centerX - fuselageWidth / 2f, topY),
+        size = Size(fuselageWidth, lengthPx),
+        cornerRadius = CornerRadius(fuselageWidth / 2f, fuselageWidth / 2f)
+    )
+
+    val engineWidth = (fuselageWidth * 0.7f).coerceAtLeast(5f)
+    val engineLength = lengthPx * 0.11f
+    val engineOffset = wingspanPx * 0.2f
+    listOf(-engineOffset, engineOffset).forEach { offset ->
+        drawRoundRect(
+            color = color.copy(alpha = 0.72f),
+            topLeft = Offset(
+                centerX + offset - engineWidth / 2f,
+                wingY + wingDepth * 0.38f
+            ),
+            size = Size(engineWidth, engineLength),
+            cornerRadius = CornerRadius(engineWidth / 2f, engineWidth / 2f)
+        )
+    }
+}
+
+private fun DrawScope.drawAircraftSideView(
+    leftX: Float,
+    baselineY: Float,
+    lengthPx: Float,
+    heightPx: Float,
+    color: Color
+) {
+    val bodyHeight = (heightPx * 0.27f).coerceAtLeast(7f)
+    val bodyBottom = baselineY - heightPx * 0.18f
+    val bodyTop = bodyBottom - bodyHeight
+
+    drawRoundRect(
+        color = color,
+        topLeft = Offset(leftX, bodyTop),
+        size = Size(lengthPx, bodyHeight),
+        cornerRadius = CornerRadius(bodyHeight / 2f, bodyHeight / 2f)
+    )
+
+    val tailFin = Path().apply {
+        moveTo(leftX + lengthPx * 0.79f, bodyTop)
+        lineTo(leftX + lengthPx * 0.9f, baselineY - heightPx)
+        lineTo(leftX + lengthPx * 0.97f, bodyTop)
+        close()
+    }
+    drawPath(tailFin, color.copy(alpha = 0.9f))
+
+    val wing = Path().apply {
+        moveTo(leftX + lengthPx * 0.36f, bodyBottom - bodyHeight * 0.2f)
+        lineTo(leftX + lengthPx * 0.69f, bodyBottom + heightPx * 0.12f)
+        lineTo(leftX + lengthPx * 0.73f, bodyBottom + heightPx * 0.18f)
+        lineTo(leftX + lengthPx * 0.49f, bodyBottom)
+        close()
+    }
+    drawPath(wing, color.copy(alpha = 0.74f))
+
+    val engineWidth = lengthPx * 0.13f
+    val engineHeight = (heightPx * 0.16f).coerceAtLeast(5f)
+    drawRoundRect(
+        color = color.copy(alpha = 0.78f),
+        topLeft = Offset(
+            leftX + lengthPx * 0.48f,
+            bodyBottom + heightPx * 0.05f
+        ),
+        size = Size(engineWidth, engineHeight),
+        cornerRadius = CornerRadius(engineHeight / 2f, engineHeight / 2f)
+    )
+
+    drawLine(
+        color = color.copy(alpha = 0.45f),
+        start = Offset(leftX, baselineY),
+        end = Offset(leftX + lengthPx, baselineY),
+        strokeWidth = 2f
+    )
+}
+
+@Composable
+private fun AircraftVisualComparison(
+    first: Aircraft,
+    second: Aircraft,
+    unitSystem: UnitSystem
+) {
+    val firstColor = Color(0xFF1565C0)
+    val secondColor = Color(0xFF00838F)
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant
+    var viewModeName by rememberSaveable {
+        mutableStateOf(AircraftViewMode.SIDE.name)
+    }
+    val viewMode = AircraftViewMode.valueOf(viewModeName)
+
+    Column {
+        Text(
+            text = "Визуальное сравнение размеров",
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            text = if (viewMode == AircraftViewMode.SIDE) {
+                "Вид сбоку: сравнение длины и высоты"
+            } else {
+                "Вид сверху: сравнение длины и размаха"
+            },
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = viewMode == AircraftViewMode.SIDE,
+                onClick = { viewModeName = AircraftViewMode.SIDE.name },
+                modifier = Modifier.weight(1f),
+                label = { Text("Сбоку") }
+            )
+            FilterChip(
+                selected = viewMode == AircraftViewMode.TOP,
+                onClick = { viewModeName = AircraftViewMode.TOP.name },
+                modifier = Modifier.weight(1f),
+                label = { Text("Сверху") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant
+        ) {
+            Column(modifier = Modifier.padding(10.dp)) {
+                ComposeCanvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(190.dp)
+                ) {
+                    val halfWidth = size.width / 2f
+
+                    drawLine(
+                        color = dividerColor,
+                        start = Offset(halfWidth, 0f),
+                        end = Offset(halfWidth, size.height),
+                        strokeWidth = 2f
+                    )
+
+                    if (viewMode == AircraftViewMode.SIDE) {
+                        val maxLength = max(first.lengthM, second.lengthM).toFloat()
+                        val maxHeight = max(first.heightM, second.heightM).toFloat()
+                        val scale = min(
+                            (halfWidth * 0.82f) / maxLength,
+                            (size.height * 0.76f) / maxHeight
+                        )
+                        val maxHeightPx = maxHeight * scale
+                        val baseline = size.height / 2f + maxHeightPx / 2f
+
+                        drawAircraftSideView(
+                            leftX = halfWidth * 0.09f,
+                            baselineY = baseline,
+                            lengthPx = first.lengthM.toFloat() * scale,
+                            heightPx = first.heightM.toFloat() * scale,
+                            color = firstColor
+                        )
+                        drawAircraftSideView(
+                            leftX = halfWidth * 1.09f,
+                            baselineY = baseline,
+                            lengthPx = second.lengthM.toFloat() * scale,
+                            heightPx = second.heightM.toFloat() * scale,
+                            color = secondColor
+                        )
+                    } else {
+                        val maxLength = max(first.lengthM, second.lengthM).toFloat()
+                        val maxWingspan = max(first.wingspanM, second.wingspanM).toFloat()
+                        val scale = min(
+                            (halfWidth * 0.78f) / maxWingspan,
+                            (size.height * 0.88f) / maxLength
+                        )
+                        val topY = size.height * 0.05f
+
+                        drawAircraftTopView(
+                            centerX = halfWidth * 0.5f,
+                            topY = topY,
+                            lengthPx = first.lengthM.toFloat() * scale,
+                            wingspanPx = first.wingspanM.toFloat() * scale,
+                            color = firstColor
+                        )
+                        drawAircraftTopView(
+                            centerX = halfWidth * 1.5f,
+                            topY = topY,
+                            lengthPx = second.lengthM.toFloat() * scale,
+                            wingspanPx = second.wingspanM.toFloat() * scale,
+                            color = secondColor
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AircraftVisualLabel(
+                        aircraft = first,
+                        color = firstColor,
+                        unitSystem = unitSystem,
+                        viewMode = viewMode,
+                        modifier = Modifier.weight(1f)
+                    )
+                    AircraftVisualLabel(
+                        aircraft = second,
+                        color = secondColor,
+                        unitSystem = unitSystem,
+                        viewMode = viewMode,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AircraftVisualLabel(
+    aircraft: Aircraft,
+    color: Color,
+    unitSystem: UnitSystem,
+    viewMode: AircraftViewMode,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = aircraft.model,
+            color = color,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
+        Text(
+            text = if (viewMode == AircraftViewMode.SIDE) {
+                "${formatLength(aircraft.lengthM, unitSystem)} × ${
+                    formatLength(aircraft.heightM, unitSystem)
+                }"
+            } else {
+                "${formatLength(aircraft.lengthM, unitSystem)} × ${
+                    formatLength(aircraft.wingspanM, unitSystem)
+                }"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -3673,13 +4102,56 @@ private fun InteractiveRouteMap(
     mode: RouteMapMode
 ) {
     val context = LocalContext.current
-    val routePoints = remember(origin.code, destination.code) {
-        greatCirclePoints(origin.point, destination.point, segments = 128)
-    }
     val routeDistance = remember(origin.code, destination.code) {
         haversineKm(origin.point, destination.point)
     }
-    val status = routeStatus(routeDistance, aircraft.rangeKm)
+    val stopover = remember(origin.code, destination.code, aircraft.fullName) {
+        findBestStopover(origin, destination, aircraft)
+    }
+    val routePath = remember(
+        origin.code,
+        destination.code,
+        stopover?.airport?.code
+    ) {
+        if (stopover == null) {
+            greatCirclePoints(
+                origin.point,
+                destination.point,
+                segments = 128
+            ) to null
+        } else {
+            val firstSegments = max(
+                32,
+                (160 * stopover.firstLegKm / stopover.totalDistanceKm).roundToInt()
+            )
+            val secondSegments = max(
+                32,
+                (160 * stopover.secondLegKm / stopover.totalDistanceKm).roundToInt()
+            )
+            val firstLegPoints = greatCirclePoints(
+                origin.point,
+                stopover.airport.point,
+                segments = firstSegments
+            )
+            val secondLegPoints = greatCirclePoints(
+                stopover.airport.point,
+                destination.point,
+                segments = secondSegments
+            )
+
+            (firstLegPoints + secondLegPoints.drop(1)) to firstLegPoints.lastIndex
+        }
+    }
+    val routePoints = routePath.first
+    val stopoverProgress = routePath.second?.let { stopIndex ->
+        stopIndex.toFloat() / routePoints.lastIndex
+    }
+    val status = routeStatus(
+        distanceKm = routeDistance,
+        rangeKm = aircraft.rangeKm,
+        hasStopover = stopover != null
+    )
+    val plannedDistance = stopover?.totalDistanceKm ?: routeDistance
     var animationProgress by remember(origin.code, destination.code) {
         mutableStateOf(0f)
     }
@@ -3765,22 +4237,37 @@ private fun InteractiveRouteMap(
                 position = destination.point
                 title = "Прибытие · ${destination.displayName}"
                 snippet = "${destination.airportName} · ${
-                    formatDistance(routeDistance, unitSystem)
+                    formatDistance(plannedDistance, unitSystem)
                 }"
             }
             mapView.overlays.add(destinationMarker)
 
+            if (stopover != null) {
+                val stopoverMarker = Marker(mapView).apply {
+                    position = stopover.airport.point
+                    title = "Посадка · ${stopover.airport.displayName}"
+                    snippet = "${stopover.airport.airportName} · далее ${
+                        formatDistance(stopover.secondLegKm, unitSystem)
+                    }"
+                }
+                mapView.overlays.add(stopoverMarker)
+            }
+
             planeMarker.position = pointAlongRoute(routePoints, animationProgress)
             planeMarker.title = aircraft.fullName
-            planeMarker.snippet = "Нажми «Запустить полёт»"
+            planeMarker.snippet = if (stopover == null) {
+                "Нажми «Запустить полёт»"
+            } else {
+                "Маршрут через ${stopover.airport.code}"
+            }
             mapView.overlays.add(planeMarker)
 
             val zoom = when {
-                routeDistance > 12000 -> 2.0
-                routeDistance > 7000 -> 2.6
-                routeDistance > 3500 -> 3.3
-                routeDistance > 1600 -> 4.1
-                routeDistance > 700 -> 5.0
+                plannedDistance > 12000 -> 2.0
+                plannedDistance > 7000 -> 2.6
+                plannedDistance > 3500 -> 3.3
+                plannedDistance > 1600 -> 4.1
+                plannedDistance > 700 -> 5.0
                 else -> 6.0
             }
             mapView.controller.setZoom(zoom)
@@ -3825,11 +4312,22 @@ private fun InteractiveRouteMap(
         if (isAnimating) {
             val startProgress = animationProgress
             val frames = 120
+            var stopoverPauseCompleted = false
 
             for (frame in 1..frames) {
                 val frameProgress = frame.toFloat() / frames
                 animationProgress = startProgress +
                         (1f - startProgress) * frameProgress
+
+                if (
+                    stopoverProgress != null &&
+                    !stopoverPauseCompleted &&
+                    animationProgress >= stopoverProgress
+                ) {
+                    stopoverPauseCompleted = true
+                    delay(700)
+                }
+
                 delay(25)
             }
 
@@ -3858,7 +4356,11 @@ private fun InteractiveRouteMap(
                     color = routeStatusColor(status).copy(alpha = 0.92f)
                 ) {
                     Text(
-                        text = "${origin.code} → ${destination.code}",
+                        text = if (stopover == null) {
+                            "${origin.code} → ${destination.code}"
+                        } else {
+                            "${origin.code} → ${stopover.airport.code} → ${destination.code}"
+                        },
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
@@ -3892,6 +4394,7 @@ private fun InteractiveRouteMap(
                         status == RouteStatus.INSUFFICIENT -> "Не долетит без посадки"
                         isAnimating -> "Самолёт в пути…"
                         animationProgress >= 0.999f -> "Повторить полёт"
+                        status == RouteStatus.STOPOVER -> "Запустить маршрут с посадкой"
                         else -> "Запустить полёт"
                     }
                 )
